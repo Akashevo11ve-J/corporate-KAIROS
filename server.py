@@ -19,7 +19,7 @@ from pydantic import BaseModel
 BASE_DIR   = Path(__file__).parent
 SLIDES_DIR = BASE_DIR / "Cash-Flow-Training for akash"
 
-app = FastAPI(title="Teaching Assistant POC", root_path="/kairos")
+app = FastAPI(title="Teaching Assistant POC")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
