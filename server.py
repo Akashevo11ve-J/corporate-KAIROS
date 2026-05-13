@@ -295,6 +295,7 @@ async def chat_sse(req: ChatRequest):
                     save_user_profile(req.course_id, req.session_id, {
                         "user_level": sess.user_level, "user_tactics": sess.user_tactics,
                     })
+                    sess.add_message("user", f"[LEVEL_ASSESSMENT_COMPLETE] User level set to '{sess.user_level}'. Do not call assess_user_level again.")
                     emit("level_complete", {"level": sess.user_level, "tactics": sess.user_tactics})
                     persist_session(sess)  # sync — next request must see user_level
                 else:
