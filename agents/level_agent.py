@@ -23,33 +23,7 @@ client = anthropic_client
 
 
 def _build_level_messages(session: Session) -> list:
-    """
-    Build the messages list for the level agent from full_history.
-    We use the real conversation — the LLM decides when it has enough signal.
-    """
-    messages = []
-    for msg in session.full_history:
-        content = msg["content"]
-        if isinstance(content, list):
-            # collapse content blocks to plain text
-            text = " ".join(
-                b.get("text", "") for b in content if isinstance(b, dict)
-            ).strip()
-        else:
-            text = str(content)
-
-        # Skip empty messages and internal triggers
-        if not text or text == "[slide loaded]":
-            continue
-
-        messages.append({"role": msg["role"], "content": text})
-
-    # Anthropic requires the first message to be from the user.
-    # If somehow it's not, seed with a minimal opener.
-    if not messages or messages[0]["role"] != "user":
-        messages.insert(0, {"role": "user", "content": "begin"})
-
-    return messages
+    return session.get_history_messages()
 
 
 def _try_parse_json(text: str):

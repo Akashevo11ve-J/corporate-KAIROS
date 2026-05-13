@@ -11,10 +11,7 @@ def get_observer_advice(session: Session) -> str:
     """
     current_item = session.get_current_item() or {}
 
-    history_lines = []
-    for m in session.full_history[-20:]:
-        history_lines.append(f"{m['role'].upper()}: {m['content']}")
-    history_text = "\n".join(history_lines)
+    history_text = session.get_topic_history_text()
 
     prompt = (
         f"You're watching a learning conversation between a tutor and a learner.\n\n"

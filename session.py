@@ -145,12 +145,25 @@ class Session:
                 self.slide_statuses[item["id"]] = "completed"
                 found_current = True
 
-    def get_topic_history_text(self) -> str:
-        """Conversation history for current topic — for assessment agent."""
-        lines = []
+    def get_history_messages(self) -> list:
+        """Full history as Anthropic messages list, content blocks flattened."""
+        messages = []
         for m in self.full_history:
-            lines.append(f"{m['role'].upper()}: {m['content']}")
-        return "\n".join(lines[-40:])  # last 40 exchanges for assessment context
+            c = m["content"]
+            if isinstance(c, list):
+                text = " ".join(b.get("text", "") for b in c if isinstance(b, dict)).strip()
+            else:
+                text = str(c)
+            if text and text != "[slide loaded]":
+                messages.append({"role": m["role"], "content": text})
+        if not messages or messages[0]["role"] != "user":
+            messages.insert(0, {"role": "user", "content": "begin"})
+        return messages
+
+    def get_topic_history_text(self) -> str:
+        return "\n".join(
+            f"{m['role'].upper()}: {m['content']}" for m in self.get_history_messages()
+        )
 
     def set_current_item(self, item: dict):
         """Set current item id and content context from a course item dict."""

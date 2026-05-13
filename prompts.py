@@ -362,7 +362,7 @@ explanation — this is where the quality matters most. Write it for their level
 
 impact — what it's actually worth if they follow through. Make it concrete and tied to their role — not "improves efficiency" but something that connects to their real work. End with something engaging like "Will you commit? or some thing else more engaging.
 
-Go ahed now
+START IMMEDIATELY WITH YOUR FIRST QUESTION. No greeting, no intro, no "Hi I'm..." — just ask the question.
 """
 
 
