@@ -543,6 +543,45 @@ h1, h2, h3 {
   animation: spin 0.9s linear infinite;
 }
 
+/* ── Voice mode button ── */
+#voice-mode-btn {
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+#voice-mode-btn svg { width: 14px; height: 14px; }
+#voice-mode-btn:hover {
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary) / 0.3);
+}
+
+/* ── Voice toast ── */
+#voice-toast {
+  position: absolute;
+  top: 58px; right: 14px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px;
+  background: hsl(var(--foreground));
+  color: #fff;
+  border-radius: var(--radius);
+  font-size: 0.8rem; font-weight: 500;
+  box-shadow: var(--shadow-lg);
+  z-index: 20;
+  opacity: 0; pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+#voice-toast.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
@@ -654,7 +693,21 @@ h1, h2, h3 {
           </div>
           <div id="chat-header-title">AI Training Assistant</div>
           <div class="online-dot"></div>
+          <button id="voice-mode-btn" title="Voice Conversation" aria-label="Voice conversation mode">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </button>
         </div>
+      </div>
+
+      <!-- Voice mode coming soon toast -->
+      <div id="voice-toast">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <span>Conversational Mode — Coming Soon</span>
       </div>
       <div id="chat-messages"></div>
 
@@ -1095,6 +1148,20 @@ userInput.addEventListener("keydown", e => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
 sendBtn.addEventListener("click", sendMessage);
+
+// ── Voice mode button ─────────────────────────────────────────────────────────
+const voiceToast = $("voice-toast");
+let voiceToastTimer = null;
+$("voice-mode-btn").addEventListener("click", () => {
+  voiceToast.classList.add("show");
+  clearTimeout(voiceToastTimer);
+  voiceToastTimer = setTimeout(() => voiceToast.classList.remove("show"), 3000);
+});
+document.addEventListener("click", e => {
+  if (!e.target.closest("#voice-mode-btn") && !e.target.closest("#voice-toast")) {
+    voiceToast.classList.remove("show");
+  }
+});
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 // Entry screen handles init — no auto-boot
