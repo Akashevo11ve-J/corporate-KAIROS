@@ -885,7 +885,7 @@ function updateProgress() {
   const total = courseItems.length;
   const pct   = ((currentIdx + 1) / total) * 100;
   progressFill.style.width = pct + "%";
-  progressLbl.textContent  = `Slide ${currentIdx + 1} of ${total}`;
+  progressLbl.textContent  = `${currentIdx + 1} of ${total}`;
 }
 
 // ── Load a slide ──────────────────────────────────────────────────────────────
