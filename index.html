@@ -331,23 +331,6 @@ h1, h2, h3 {
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
-/* ── Finished watching button ── */
-.finished-watching-wrap { padding: 4px 14px 8px; }
-.finished-watching-btn {
-  width: 100%; padding: 9px;
-  border-radius: 9999px;
-  background: transparent;
-  border: 1.5px solid hsl(var(--primary-button));
-  color: hsl(var(--primary-button));
-  font-family: var(--font-display);
-  font-size: 0.82rem; font-weight: 600;
-  cursor: pointer; letter-spacing: 0.02em;
-  transition: background 0.2s, color 0.2s;
-}
-.finished-watching-btn:hover {
-  background: hsl(var(--primary-button));
-  color: #fff;
-}
 
 /* ── Continue button ── */
 #continue-wrap { padding: 8px 14px; flex-shrink: 0; display: none; }
@@ -743,7 +726,7 @@ h1, h2, h3 {
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────────
-const API = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" ? "" : "/kairos";
+const API = "/kairos";
 let sessionId   = null;
 let courseId    = null;
 let courseItems = [];
@@ -1026,9 +1009,7 @@ async function consumeStream(resp, onDone) {
         if (liveBubble) finaliseBubble(liveBubble);
         liveBubble = null;
         if (d.ready_to_proceed) showContinue();
-        if (!d.ready_to_proceed && courseItems[currentIdx]?.type === "video") {
-          showFinishedWatchingBtn();
-        }
+
         if (onDone) onDone();
         return;
 
@@ -1079,29 +1060,6 @@ continueBtn.addEventListener("click", async () => {
 
 
 // ── UI helpers ────────────────────────────────────────────────────────────────
-function showFinishedWatchingBtn() {
-  if ($("finished-watching-wrap")) return; // already shown
-  const wrap = document.createElement("div");
-  wrap.className = "finished-watching-wrap";
-  wrap.id = "finished-watching-wrap";
-  const btn = document.createElement("button");
-  btn.className = "finished-watching-btn";
-  btn.textContent = "Finished watching the video";
-  btn.addEventListener("click", () => {
-    wrap.remove();
-    userInput.value = "";
-    appendMessage("user", "I finished watching the video");
-    setBusy(true);
-    fetch(`${API}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: sessionId, course_id: courseId, message: "I finished watching the video" }),
-    }).then(r => consumeStream(r));
-  });
-  wrap.appendChild(btn);
-  chatMessages.after(wrap);
-}
-
 function appendMessage(role, text) {
   const div = document.createElement("div");
   div.className = `msg ${role}`;
