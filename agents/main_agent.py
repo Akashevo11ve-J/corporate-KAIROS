@@ -35,17 +35,21 @@ def _build_system_prompt(session: Session) -> str:
 
 def _build_messages(session: Session) -> list:
     messages = []
-    if session.history_summary:
-        messages.append({
-            "role":    "user",
-            "content": f"[CONVERSATION SUMMARY SO FAR]\n{session.history_summary}"
-        })
-        messages.append({
-            "role":    "assistant",
-            "content": "Understood — I have the context from our earlier conversation."
-        })
     for msg in session.recent_messages:
         messages.append(msg)
+    if session.history_summary:
+        summary_injection = f"[CONVERSATION SUMMARY SO FAR]\n{session.history_summary}"
+        # Find the first user message to inject the summary into
+        for i, msg in enumerate(messages):
+            if msg["role"] == "user":
+                messages[i] = {
+                    "role":    "user",
+                    "content": f"{summary_injection}\n\n[CURRENT MESSAGE]\n{msg['content']}"
+                }
+                break
+        else:
+            # No user message found — prepend summary as a standalone user message
+            messages.insert(0, {"role": "user", "content": summary_injection})
     return messages
 
 
