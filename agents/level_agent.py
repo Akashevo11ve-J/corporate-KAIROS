@@ -28,11 +28,13 @@ def _build_level_messages(session: Session) -> list:
 
 def _try_parse_json(text: str):
     """Returns (closing_text, json_data) or (None, None) if no JSON found."""
-    data = parse_llm_json(text)
+    # Strip markdown code fences so the model can't hide JSON inside ```json blocks
+    clean = re.sub(r'```(?:json)?\s*', '', text).replace('```', '').strip()
+    data = parse_llm_json(clean)
     if not data:
         return None, None
-    match = re.search(r'\{.*\}', text, re.DOTALL)
-    closing = text[:match.start()].strip() if match else None
+    match = re.search(r'\{.*\}', clean, re.DOTALL)
+    closing = clean[:match.start()].strip() if match else None
     return closing or None, data
 
 

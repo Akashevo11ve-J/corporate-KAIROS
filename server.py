@@ -296,9 +296,10 @@ async def chat_sse(req: ChatRequest):
                         "user_level": sess.user_level, "user_tactics": sess.user_tactics,
                     })
                     emit("level_complete", {"level": sess.user_level, "tactics": sess.user_tactics})
-
-                persist_session(sess, background=True)
-                emit("done", {"response": "", "ready_to_proceed": False})
+                    persist_session(sess)  # sync — next request must see user_level
+                else:
+                    persist_session(sess, background=True)
+                emit("done", {"response": "", "ready_to_proceed": done})
                 return
 
             result = agent_chat(sess, req.course_id, req.message, emit=emit)

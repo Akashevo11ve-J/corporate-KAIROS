@@ -90,7 +90,7 @@ def execute_tool(tool_name: str, tool_input: dict, session, course_id: str) -> s
     elif tool_name == "assess_user_level":
         if session.user_level:
             # Already assessed — guard against double-call
-            result = f"[LEVEL_ALREADY_SET] User level is '{session.user_level}'. Tactics: {session.user_tactics}. Do not call this again. IMPORTANT: Check the conversation history — you may have already introduced this slide or video before the assessment. Do NOT re-explain or re-introduce content you already covered. Pick up exactly where the conversation left off."
+            result = f"[LEVEL_ALREADY_SET] Level is '{session.user_level}'. Do NOT call this tool again. Do NOT explain or re-introduce the current slide/video — the level agent already used it for its questions. Ask one question pitched at their level and move forward."
         else:
             user_context = tool_input.get("user_context", "")
             first_question = start_level_assessment(session, user_context)
