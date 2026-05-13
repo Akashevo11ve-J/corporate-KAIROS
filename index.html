@@ -331,6 +331,24 @@ h1, h2, h3 {
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
+/* ── Finished watching button ── */
+.finished-watching-wrap { padding: 4px 14px 8px; }
+.finished-watching-btn {
+  width: 100%; padding: 9px;
+  border-radius: 9999px;
+  background: transparent;
+  border: 1.5px solid hsl(var(--primary-button));
+  color: hsl(var(--primary-button));
+  font-family: var(--font-display);
+  font-size: 0.82rem; font-weight: 600;
+  cursor: pointer; letter-spacing: 0.02em;
+  transition: background 0.2s, color 0.2s;
+}
+.finished-watching-btn:hover {
+  background: hsl(var(--primary-button));
+  color: #fff;
+}
+
 /* ── Continue button ── */
 #continue-wrap { padding: 8px 14px; flex-shrink: 0; display: none; }
 #continue-btn {
@@ -354,19 +372,19 @@ h1, h2, h3 {
 #input-wrap {
   padding: 10px 14px 14px;
   border-top: 1px solid hsl(var(--border) / 0.4);
-  flex-shrink: 0; display: flex; gap: 8px;
+  flex-shrink: 0; display: flex; gap: 8px; align-items: flex-end;
   background: hsl(var(--card));
 }
 #user-input {
   flex: 1; padding: 9px 13px;
-  border-radius: 9999px;
+  border-radius: 18px;
   border: 1px solid hsl(var(--input));
   font-family: var(--font-body);
   font-size: 0.875rem; outline: none;
   background: hsl(var(--muted));
   color: hsl(var(--foreground));
   transition: border-color 0.15s, box-shadow 0.15s;
-  resize: none; max-height: 100px; line-height: 1.4;
+  resize: none; max-height: 80px; overflow-y: auto; line-height: 1.4; overflow-x: hidden;
 }
 #user-input:focus {
   border-color: hsl(var(--ring));
@@ -636,7 +654,6 @@ h1, h2, h3 {
   <div id="topbar">
     <div id="topbar-brand">
       <img id="topbar-logo" src="src/evo11ve-logo.png" alt="evo11ve" onerror="this.style.display='none'" />
-      <img id="topbar-favicon" src="src/Fav%20icon-01.png" alt="KAIROS" />
     </div>
     <div id="topbar-divider"></div>
     <div id="topbar-course">AI Teaching Assistant</div>
@@ -674,10 +691,15 @@ h1, h2, h3 {
         <div id="chat-header-super">AI Assistant</div>
         <div id="chat-header-row">
           <div id="chat-header-avatar">
-            <img src="src/Fav%20icon-01.png" alt="KAIROS" style="width:18px;height:18px;object-fit:contain;" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+              <circle cx="12" cy="8" r="3"/>
+              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+              <path d="M15 3.5A4 4 0 0 1 18 7"/>
+              <path d="M9 3.5A4 4 0 0 0 6 7"/>
+              <line x1="12" y1="2" x2="12" y2="1"/>
+            </svg>
           </div>
           <div id="chat-header-title">AI Training Assistant</div>
-          <div class="online-dot"></div>
           <button id="voice-mode-btn" title="Voice Conversation" aria-label="Voice conversation mode">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
@@ -709,7 +731,7 @@ h1, h2, h3 {
 
       <!-- Input -->
       <div id="input-wrap">
-        <textarea id="user-input" placeholder="Ask Your Question…" rows="1"></textarea>
+        <textarea id="user-input" placeholder="Type Here…" rows="1"></textarea>
         <button id="send-btn" aria-label="Send">
           <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
         </button>
@@ -721,7 +743,7 @@ h1, h2, h3 {
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────────
-const API = "/kairos";
+const API = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" ? "" : "/kairos";
 let sessionId   = null;
 let courseId    = null;
 let courseItems = [];
@@ -894,6 +916,7 @@ async function loadSlide(idx, isInit) {
   readyToProc = false;
   continueWrap.style.display = "none";
   $("input-wrap").style.display = "flex";
+  const _fw = $("finished-watching-wrap"); if (_fw) _fw.remove();
   chatMessages.innerHTML     = "";
   hideStatus();
 
@@ -1003,6 +1026,9 @@ async function consumeStream(resp, onDone) {
         if (liveBubble) finaliseBubble(liveBubble);
         liveBubble = null;
         if (d.ready_to_proceed) showContinue();
+        if (!d.ready_to_proceed && courseItems[currentIdx]?.type === "video") {
+          showFinishedWatchingBtn();
+        }
         if (onDone) onDone();
         return;
 
@@ -1053,6 +1079,29 @@ continueBtn.addEventListener("click", async () => {
 
 
 // ── UI helpers ────────────────────────────────────────────────────────────────
+function showFinishedWatchingBtn() {
+  if ($("finished-watching-wrap")) return; // already shown
+  const wrap = document.createElement("div");
+  wrap.className = "finished-watching-wrap";
+  wrap.id = "finished-watching-wrap";
+  const btn = document.createElement("button");
+  btn.className = "finished-watching-btn";
+  btn.textContent = "Finished watching the video";
+  btn.addEventListener("click", () => {
+    wrap.remove();
+    userInput.value = "";
+    appendMessage("user", "I finished watching the video");
+    setBusy(true);
+    fetch(`${API}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId, course_id: courseId, message: "I finished watching the video" }),
+    }).then(r => consumeStream(r));
+  });
+  wrap.appendChild(btn);
+  chatMessages.after(wrap);
+}
+
 function appendMessage(role, text) {
   const div = document.createElement("div");
   div.className = `msg ${role}`;
