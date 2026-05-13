@@ -236,6 +236,10 @@ h1, h2, h3 {
   background: hsl(var(--card));
   border-left: 1px solid hsl(var(--border) / 0.5);
   overflow: hidden;
+  transition: width 0.25s ease;
+}
+#chat-panel.expanded {
+  width: 460px;
 }
 #chat-header {
   padding: 10px 16px 8px;
@@ -1132,6 +1136,10 @@ userInput.addEventListener("keydown", e => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
 sendBtn.addEventListener("click", sendMessage);
+
+const chatPanel = $("chat-panel");
+userInput.addEventListener("focus", () => chatPanel.classList.add("expanded"));
+userInput.addEventListener("blur",  () => chatPanel.classList.remove("expanded"));
 
 // ── Voice mode button ─────────────────────────────────────────────────────────
 const voiceToast = $("voice-toast");
