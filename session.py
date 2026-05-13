@@ -63,6 +63,9 @@ class Session:
     # Recent messages since last compression
     recent_messages: list = field(default_factory=list)
 
+    # Course-level summary (loaded once, injected into every system prompt)
+    course_wrap: str = ""
+
     # Current content
     current_item_id: str = ""
     current_content_context: str = ""

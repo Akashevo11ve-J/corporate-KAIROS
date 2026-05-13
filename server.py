@@ -53,13 +53,14 @@ def load_session(session_id: str, course_id: str):
         return _sessions[session_id]
 
     from session import Session
-    from mongo import build_course_items, load_course_session
+    from mongo import build_course_items, fetch_course_wrap, load_course_session
 
     doc = load_course_session(session_id)
     if not doc:
         return None
 
     items = build_course_items(course_id)
+    course_wrap = fetch_course_wrap(course_id)
 
     sess = Session(session_id=session_id)
     sess.user_name               = doc.get("user_name", "")
@@ -70,6 +71,7 @@ def load_session(session_id: str, course_id: str):
     sess.user_tactics            = doc.get("user_tactics", {})
     sess.history_summary         = doc.get("history_summary", "")
     sess.level_assessment_active = doc.get("level_assessment_active", False)
+    sess.course_wrap             = course_wrap
 
     full_history = doc.get("history", [])
     sess.full_history    = full_history
@@ -132,7 +134,7 @@ async def index():
 @app.post("/api/session/new", response_model=NewSessionResponse)
 async def new_session(req: NewSessionRequest):
     from session import Session
-    from mongo import build_course_items, save_user_profile, save_course_session
+    from mongo import build_course_items, fetch_course_wrap, save_user_profile, save_course_session
     from config import VIDEO_URL, IMAGE_URL
 
     session_id = req.session_id.strip() or str(uuid.uuid4())[:8]
@@ -152,6 +154,7 @@ async def new_session(req: NewSessionRequest):
         sess.user_skillsets   = req.user_skillsets
         sess.user_description = req.user_description
         sess.course_items     = items
+        sess.course_wrap      = fetch_course_wrap(req.course_id)
 
         first = items[0]
         sess.current_item_id             = first["id"]

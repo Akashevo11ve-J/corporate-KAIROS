@@ -16,6 +16,7 @@ def _build_system_prompt(session: Session) -> str:
     current_item  = session.get_current_item() or {}
     skillsets_str = ", ".join(session.user_skillsets) if session.user_skillsets else "not specified"
     print(session.current_content_context)
+    print(f"[MainAgent] course_wrap ({len(session.course_wrap)} chars): {session.course_wrap[:200]}", flush=True)
     prompt = MAIN_AGENT_SYSTEM.format(
         user_name=session.user_name,
         user_role=session.user_role,
@@ -25,6 +26,7 @@ def _build_system_prompt(session: Session) -> str:
         current_content_title=current_item.get("title", ""),
         content_type=current_item.get("type", "slide"),
         course_progress_json=session.get_course_progress_json(),
+        course_wrap=session.course_wrap,
         current_content_context=session.current_content_context,
         ready_signal=SIGNAL_READY_TO_PROCEED,
     )

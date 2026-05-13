@@ -19,10 +19,10 @@ def _get_db():
 
 # ── Course structure ─────────
 
-def fetch_course_structure(course_id: str) -> list:
+def fetch_course_structure(course_id: str) -> tuple[list, str]:
     """
-    Actual doc shape in DB:
-    { "course_id": "cashflow_001", "slides": [{ "id": "slide-01-welcome", "type": "slide" }, ...] }
+    Returns (slides, course_wrap).
+    Doc shape: { "course_id": "...", "slides": [...], "course_wrap": "..." }
     """
     db  = _get_db()
     col = db[MONGO_COLLECTION_COURSE_STRUCT]
@@ -30,15 +30,15 @@ def fetch_course_structure(course_id: str) -> list:
 
     if not doc:
         print(f"[MongoDB] ERROR: no course-structure found for course_id='{course_id}'", flush=True)
-        return []
+        return [], ""
 
-    # DB uses "slides", fall back to "items" if ever migrated
     slides = doc.get("slides", doc.get("items", []))
-    print(f"[MongoDB] course-structure fetched | course_id='{course_id}' | {len(slides)} slides", flush=True)
+    course_wrap = doc.get("course_wrap", "")
+    print(f"[MongoDB] course-structure fetched | course_id='{course_id}' | {len(slides)} slides | wrap={'yes' if course_wrap else 'no'}", flush=True)
     for s in slides:
         print(f"  - [{s.get('type','?')}] {s.get('id','?')} status={s.get('status','none')}", flush=True)
 
-    return slides
+    return slides, course_wrap
 
 
 def _build_description_index(course_id: str) -> dict:
@@ -165,37 +165,38 @@ def save_user_profile(course_id: str, session_id: str, profile: dict):
 
 def build_course_items(course_id: str) -> list:
     """
-    Combine course-structure (ordered slide IDs) with course-data (descriptions)
-    into a single list the session and UI can use.
+    Returns the ordered list of course items with descriptions.
     """
-    structure = fetch_course_structure(course_id)
+    structure, _ = fetch_course_structure(course_id)
     if not structure:
         return []
 
-    # Build description index keyed by slide ID from the content array
     desc_index = _build_description_index(course_id)
 
     items = []
-    for i, raw in enumerate(structure):
+    for raw in structure:
         item_id = raw["id"]
         entry   = desc_index.get(item_id, {})
-
-        # Status is always "upcoming" from the shared structure —
-        # actual per-user status is stored in the session doc and applied after load.
-        status = "upcoming"
-
         items.append({
             "id":          item_id,
             "type":        entry.get("type", raw.get("type", "slide")),
             "title":       entry.get("title", item_id),
             "image_name":  entry.get("image_name", ""),
             "video_name":  entry.get("video_name", ""),
-            "status":      status,
+            "status":      "upcoming",
             "description": entry.get("description", ""),
         })
 
     print(f"[MongoDB] built {len(items)} course items for course_id='{course_id}'", flush=True)
     return items
+
+
+def fetch_course_wrap(course_id: str) -> str:
+    """
+    Returns the course_wrap summary string for a given course.
+    """
+    _, course_wrap = fetch_course_structure(course_id)
+    return course_wrap
 
 
 # ── Course session persistence ────────────────────────────────────────────────

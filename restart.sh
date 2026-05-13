@@ -12,6 +12,13 @@ echo "Killing residual uvicorn processes for KAIROS..."
 ps aux | grep '[u]vicorn.*server' | awk '{print $2}' | xargs -r sudo kill -9
 sleep 2
 
+# Clear Python cache
+echo "Clearing Python cache..."
+find /home/ubuntu/corporate-KAIROS -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+find /home/ubuntu/corporate-KAIROS -name "*.pyc" -delete 2>/dev/null
+find /home/ubuntu/corporate-KAIROS -name "*.pyo" -delete 2>/dev/null
+echo "Cache cleared."
+
 # Start KAIROS server
 echo "Starting KAIROS server on port 5050..."
 nohup /home/ubuntu/anaconda3/envs/kairos/bin/uvicorn \

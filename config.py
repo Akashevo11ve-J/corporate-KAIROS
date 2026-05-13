@@ -4,8 +4,8 @@ Configuration — loads from .env
 
 import os
 from dotenv import load_dotenv
-
-load_dotenv()
+from pathlib import Path
+load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
 
 # ── Models ───────────────────────────────────────────────────────────────────
 MAIN_AGENT_MODEL   = "claude-sonnet-4-6"
@@ -34,7 +34,7 @@ ASSESSMENT_QUESTION_COUNT = 5
 
 # ── MongoDB ───────────────────────────────────────────────────────────────────
 MONGO_URI                      = os.getenv("MONGO_URI")
-MONGO_DB                       = os.getenv("MONGO_DB", "db")
+MONGO_DB                       = os.getenv("MONGO_DB")
 MONGO_COLLECTION_COURSE_DATA   = os.getenv("MONGO_COLLECTION_COURSE_DATA", "course-data")
 MONGO_COLLECTION_COURSE_STRUCT = os.getenv("MONGO_COLLECTION_COURSE_STRUCTURE", "course-structure")
 
