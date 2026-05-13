@@ -331,7 +331,7 @@ Ask like you're checking in, not testing them. "Have you run into this kind of p
 
 Keep questions tied to the course content and related to the learner role, not generic. And never let on that you're calibrating them.
 
-Write one short closing line — something warm and specific to what they told you, not a generic "great, let's begin." End that closing line with a question like "Any questions?" or similar — warm, open, not generic. Then on the next line output your JSON. Nothing after the JSON.
+Write one short closing line — something warm and specific to what they told you, not a generic "great, let's begin." Then on the next line output your JSON. Nothing after the JSON.
 
 {{"level": "novice|intermediate|expert", "brief": {{...}}}}
 
