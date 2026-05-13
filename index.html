@@ -228,18 +228,6 @@ h1, h2, h3 {
 .nav-item .nav-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-item .nav-lock { font-size: 0.75rem; flex-shrink: 0; opacity: 0.35; }
 .nav-item.done .nav-lock, .nav-item.active .nav-lock { opacity: 0; width: 0; }
-#nav-drawer-footer {
-  padding: 12px 16px;
-  border-top: 1px solid hsl(var(--border) / 0.5);
-}
-#reset-btn {
-  width: 100%; padding: 8px; border-radius: var(--radius);
-  border: 1px solid hsl(var(--border));
-  background: none; font-family: var(--font-body);
-  font-size: 0.78rem; color: hsl(var(--muted-foreground));
-  cursor: pointer; transition: background 0.15s;
-}
-#reset-btn:hover { background: hsl(var(--muted)); }
 
 /* ── Chat Panel ── */
 #chat-panel {
@@ -638,9 +626,6 @@ h1, h2, h3 {
       </button>
     </div>
     <div id="nav-list"></div>
-    <div id="nav-drawer-footer">
-      <button id="reset-btn">Reset session</button>
-    </div>
   </div>
 </div>
 
@@ -1066,14 +1051,6 @@ continueBtn.addEventListener("click", async () => {
   busy = false;
 });
 
-// ── Reset ─────────────────────────────────────────────────────────────────────
-$("reset-btn").addEventListener("click", async () => {
-  if (!confirm("Reset your session? All progress will be lost.")) return;
-  appEl.style.display       = "none";
-  courseEntry.style.display = "flex";
-  courseBtn.disabled        = false;
-  courseErr.style.display   = "none";
-});
 
 // ── UI helpers ────────────────────────────────────────────────────────────────
 function appendMessage(role, text) {
