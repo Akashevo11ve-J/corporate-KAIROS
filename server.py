@@ -280,8 +280,10 @@ async def chat_sse(req: ChatRequest):
                 return
 
             if sess.level_assessment_active:
+                emit("tool_start", {"tool": "assess_user_level"})
                 sess.add_message("user", req.message)
                 result = level_answer(sess, req.message)
+                emit("tool_done", {"tool": "assess_user_level"})
                 reply  = result["response"]
                 done   = result["level_complete"]
 

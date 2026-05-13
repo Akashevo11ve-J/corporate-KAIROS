@@ -93,6 +93,16 @@ _POOLS["level"] = [
     "Calibrating to you...",
     "Sizing up what you know...",
     "Figuring out your level...",
+    "Mapping your experience...",
+    "Scanning what you've worked with...",
+    "Building your profile...",
+    "Checking what clicks for you...",
+    "Piecing together your background...",
+    "Understanding how you think about this...",
+    "Getting the lay of the land...",
+    "Tuning to your level...",
+    "Reading between the lines...",
+    "Connecting the dots on your experience...",
 ]
 
 
