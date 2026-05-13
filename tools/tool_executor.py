@@ -62,7 +62,7 @@ def execute_tool(tool_name: str, tool_input: dict, session, course_id: str) -> s
         video_name = _resolve_video_name(course_id, video_id)
         print(f"[ToolExecutor] transcribe_full_video | video_id='{video_id}' | file='{video_name}'", flush=True)
         from tools.video_processor import transcribe_full_video as _transcribe_full  # heavy optional dep
-        raw    = _transcribe_full(video_name)
+        raw    = _transcribe_full(video_name, course_id)
         result = (
             f"[Full Video Transcript: {video_id}]\n"
             f"Each line is one sentence with its exact timestamp in [MM:SS–MM:SS] format.\n\n"
@@ -125,7 +125,7 @@ def _clip_and_transcribe(video_id: str, start_time: str, end_time: str,
     video_name = _resolve_video_name(course_id, video_id)
     print(f"[ToolExecutor] clip_and_transcribe | video='{video_name}' | {start_time}→{end_time}", flush=True)
     from tools.video_processor import clip_and_transcribe as _clip  # heavy optional dep
-    raw = _clip(video_name, start_time, end_time)
+    raw = _clip(video_name, start_time, end_time, course_id)
     return (
         f"[Segment Transcript: {start_time} → {end_time}]\n"
         f"Each line is one sentence with its exact timestamp in [MM:SS–MM:SS] format.\n\n"
@@ -137,5 +137,5 @@ def _extract_frame(video_id: str, timestamp: str, what_to_look_for: str, course_
     video_name = _resolve_video_name(course_id, video_id)
     print(f"[ToolExecutor] extract_frame | video='{video_name}' | t={timestamp}", flush=True)
     from tools.video_processor import extract_frame as _frame  # heavy optional dep
-    description = _frame(video_name, timestamp, what_to_look_for)
+    description = _frame(video_name, timestamp, what_to_look_for, course_id)
     return f"[Frame at {timestamp}]\n\n{description}"

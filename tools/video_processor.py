@@ -54,7 +54,7 @@ def download_from_s3(url: str, output_path: str) -> bool:
         return False
 
 
-def _resolve_video_path(video_name: str) -> str:
+def _resolve_video_path(video_name: str, course_id: str = "") -> str:
     """
     Given a video_name from MongoDB (e.g. 'Cash_Flow_for_Beginners...mp4'),
     return the absolute path on disk. If not found locally and VIDEO_URL is
@@ -67,9 +67,13 @@ def _resolve_video_path(video_name: str) -> str:
     cwd_path = os.path.join(os.getcwd(), video_name)
     if os.path.exists(cwd_path):
         return cwd_path
-    # Download from S3 if URL is configured — append the filename to the base URL
+    # Download from S3 — path is {VIDEO_URL}/{course_id}/{video_name}
     if VIDEO_URL:
-        full_url = VIDEO_URL.rstrip("/") + "/" + video_name
+        parts = [VIDEO_URL.rstrip("/")]
+        if course_id:
+            parts.append(course_id)
+        parts.append(video_name)
+        full_url = "/".join(parts)
         dest = os.path.join(VIDEO_BASE_DIR, video_name)
         if download_from_s3(full_url, dest):
             return dest
@@ -248,12 +252,12 @@ def _audio_then_vision_fallback(clip: "VideoFileClip", start: float, end: float,
 
 # ── Public tool functions ─────────────────────────────────────────────────────
 
-def clip_and_transcribe(video_name: str, start_time: str, end_time: str) -> str:
+def clip_and_transcribe(video_name: str, start_time: str, end_time: str, course_id: str = "") -> str:
     """
     Extract and transcribe a specific segment of a video.
     Returns transcript text, or a GPT-4o Vision description if audio is silent.
     """
-    video_path = _resolve_video_path(video_name)
+    video_path = _resolve_video_path(video_name, course_id)
     start = _parse_timestamp(start_time)
     end   = _parse_timestamp(end_time)
     label = f"{start_time}→{end_time}"
@@ -267,12 +271,12 @@ def clip_and_transcribe(video_name: str, start_time: str, end_time: str) -> str:
     return result
 
 
-def transcribe_full_video(video_name: str) -> str:
+def transcribe_full_video(video_name: str, course_id: str = "") -> str:
     """
     Transcribe the entire audio track of a video.
     Falls back to frame-by-frame vision if silent.
     """
-    video_path = _resolve_video_path(video_name)
+    video_path = _resolve_video_path(video_name, course_id)
     print(f"[VideoProcessor] transcribe_full_video | {video_name}", flush=True)
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -285,12 +289,12 @@ def transcribe_full_video(video_name: str) -> str:
     return result
 
 
-def extract_frame(video_name: str, timestamp: str, what_to_look_for: str) -> str:
+def extract_frame(video_name: str, timestamp: str, what_to_look_for: str, course_id: str = "") -> str:
     """
     Pull a single frame at the given timestamp and describe it with GPT-4o Vision,
     focused on what_to_look_for.
     """
-    video_path = _resolve_video_path(video_name)
+    video_path = _resolve_video_path(video_name, course_id)
     t = _parse_timestamp(timestamp)
     print(f"[VideoProcessor] extract_frame | {video_name} | t={t:.0f}s | '{what_to_look_for}'", flush=True)
 
