@@ -13,7 +13,7 @@ WORKER_MODEL       = "claude-haiku-4-5-20251001"
 ASSESSMENT_MODEL   = "claude-sonnet-4-6"
 
 # ── Temperatures ──────────────────────────────────────────────────────────────
-TEMP_MAIN_AGENT   = 0.7   # teaching — warm and natural but focused
+TEMP_MAIN_AGENT   = 0.45   # teaching — warm and natural but focused
 TEMP_ASSESSMENT   = 0.3   # MCQ generation — structured, consistent
 TEMP_LEVEL_AGENT  = 0.3   # calibration questions + JSON output
 TEMP_GUARDRAIL    = 0.1   # classification — as deterministic as possible
