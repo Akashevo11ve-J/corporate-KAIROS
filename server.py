@@ -16,6 +16,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from config import VIDEO_URL, IMAGE_URL, SIGNAL_READY_TO_PROCEED
+from mongo import load_course_session, build_course_items
+from mongo import save_user_profile
+from agents.observer_agent import generate_wrap
+from agents.level_agent import level_answer
+from agents.main_agent import chat as agent_chat
+from agents.status_agent import StatusAgent, _TOOL_POOL_MAP
+from context_loader import load_context, new_context
+from store import persist_session
+
 BASE_DIR   = Path(__file__).parent
 SLIDES_DIR = BASE_DIR / "Cash-Flow-Training for akash"
 
@@ -29,70 +39,11 @@ app.add_middleware(
 app.mount("/src", StaticFiles(directory=BASE_DIR / "src"), name="src")
 
 
-@app.get("/slides/{filename}")
-async def get_slide(filename: str):
-    path = SLIDES_DIR / filename
-    if not path.exists():
-        raise HTTPException(status_code=404, detail=f"Slide not found: {filename}")
-    return FileResponse(str(path))
-
-
-_sessions: dict = {}  # session_id -> Session (RAM cache per user)
-
-
 def _display_messages_from_history(full_history: list) -> list:
     return [
         m for m in full_history
         if isinstance(m.get("content"), str) and m["content"] != "[slide loaded]"
     ]
-
-
-def load_session(session_id: str, course_id: str):
-    """Return session from RAM cache; load from MongoDB on first hit or after restart."""
-    if session_id in _sessions:
-        return _sessions[session_id]
-
-    from session import Session
-    from mongo import build_course_items, fetch_course_wrap, load_course_session
-
-    doc = load_course_session(session_id)
-    if not doc:
-        return None
-
-    items = build_course_items(course_id)
-    course_wrap = fetch_course_wrap(course_id)
-
-    sess = Session(session_id=session_id)
-    sess.user_name               = doc.get("user_name", "")
-    sess.user_role               = doc.get("user_role", "")
-    sess.user_description        = doc.get("user_description", "")
-    sess.user_skillsets          = doc.get("user_skillsets", [])
-    sess.user_level              = doc.get("user_level", "")
-    sess.user_tactics            = doc.get("user_tactics", {})
-    sess.history_summary         = doc.get("history_summary", "")
-    sess.level_assessment_active = doc.get("level_assessment_active", False)
-    sess.course_wrap             = course_wrap
-
-    full_history = doc.get("history", [])
-    sess.full_history    = full_history
-    sess.recent_messages = full_history[-5:] if sess.history_summary else list(full_history)
-
-    saved_statuses = doc.get("slide_statuses", {})
-    sess.slide_statuses = saved_statuses
-    sess.course_items   = items
-    for item in sess.course_items:
-        if item["id"] in saved_statuses:
-            item["status"] = saved_statuses[item["id"]]
-
-    saved_item_id = doc.get("current_item_id", "")
-    current_item  = next((i for i in items if i["id"] == saved_item_id), None) or (items[0] if items else None)
-    if current_item:
-        sess.current_item_id = current_item["id"]
-        sess.current_content_context = f"{current_item['title']}\n\n{current_item.get('description', '')}"
-
-    _sessions[session_id] = sess
-    print(f"[Server] session loaded | session_id='{session_id}' | history={len(full_history)} msgs", flush=True)
-    return sess
 
 
 # ── Request / response models ─────────────────────────────────────────────────
@@ -133,49 +84,32 @@ async def index():
 
 @app.post("/api/session/new", response_model=NewSessionResponse)
 async def new_session(req: NewSessionRequest):
-    from session import Session
-    from mongo import build_course_items, fetch_course_wrap, save_user_profile, save_course_session
-    from config import VIDEO_URL, IMAGE_URL
-
     session_id = req.session_id.strip() or str(uuid.uuid4())[:8]
 
-    # Try to load existing session
-    sess = load_session(session_id, req.course_id)
+    sess = load_context(session_id, req.course_id)
 
     if sess is None:
-        # Brand new — create user + session
-        items = build_course_items(req.course_id)
-        if not items:
+        sess = new_context(
+            session_id=session_id,
+            course_id=req.course_id,
+            user_name=req.user_name,
+            user_role=req.user_role,
+            user_skillsets=req.user_skillsets,
+            user_description=req.user_description,
+        )
+        if not sess.course_items:
             raise HTTPException(status_code=404, detail=f"Course '{req.course_id}' not found.")
-
-        sess = Session(session_id=session_id)
-        sess.user_name        = req.user_name
-        sess.user_role        = req.user_role
-        sess.user_skillsets   = req.user_skillsets
-        sess.user_description = req.user_description
-        sess.course_items     = items
-        sess.course_wrap      = fetch_course_wrap(req.course_id)
-
-        first = items[0]
-        sess.current_item_id             = first["id"]
-        first["status"]                  = "ongoing"
-        sess.slide_statuses[first["id"]] = "ongoing"
-
-        sess.current_content_context = f"{first['title']}\n\n{first['description']}"
 
         if req.user_name or req.user_role:
             save_user_profile(req.course_id, session_id, {
-                "name":        req.user_name,
-                "role":        req.user_role,
-                "skillsets":   req.user_skillsets,
-                "description": req.user_description,
+                "name": req.user_name, "role": req.user_role,
+                "skillsets": req.user_skillsets, "description": req.user_description,
             })
 
-        _sessions[session_id] = sess
-        save_course_session(sess)
+        persist_session(sess)
         print(f"[Server] session created | session_id='{session_id}'", flush=True)
     else:
-        print(f"[Server] session resumed | session_id='{session_id}' | history={len(sess.full_history)} msgs", flush=True)
+        print(f"[Server] session resumed | session_id='{session_id}' | recent={len(sess.recent_messages)} msgs", flush=True)
 
     ui_items = [
         {
@@ -200,7 +134,6 @@ async def new_session(req: NewSessionRequest):
 
 @app.get("/api/session/{session_id}/state")
 async def session_state(session_id: str, course_id: str):
-    from mongo import load_course_session, build_course_items
     doc = load_course_session(session_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -219,7 +152,6 @@ async def session_state(session_id: str, course_id: str):
 
 @app.get("/api/session/{session_id}/messages")
 async def get_session_messages(session_id: str):
-    from mongo import load_course_session
     doc = load_course_session(session_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -230,19 +162,16 @@ async def get_session_messages(session_id: str):
 
 @app.post("/api/advance")
 async def advance(req: NavigateRequest):
-    from mongo import save_course_session
-
-    sess = load_session(req.session_id, req.course_id)
+    sess = load_context(req.session_id, req.course_id)
     if not sess:
         raise HTTPException(status_code=404, detail="Session not found")
 
     sess.advance_to_next()
     item = sess.get_current_item()
-
     if item:
-        sess.current_content_context = f"{item['title']}\n\n{item['description']}"
+        sess.set_current_item(item)
 
-    threading.Thread(target=save_course_session, args=(sess,), daemon=True).start()
+    persist_session(sess, background=True)
     return {"ok": True, "current_item": item}
 
 
@@ -250,16 +179,13 @@ async def advance(req: NavigateRequest):
 
 @app.get("/api/session/{session_id}/wrap")
 async def get_wrap(session_id: str, course_id: str):
-    from agents.observer_agent import generate_wrap
-    from mongo import save_course_session
-
-    sess = load_session(session_id, course_id)
+    sess = load_context(session_id, course_id)
     if not sess:
         raise HTTPException(status_code=404, detail="Session not found")
 
     loop = asyncio.get_event_loop()
     wrap = await loop.run_in_executor(None, lambda: generate_wrap(sess))
-    save_course_session(sess)
+    persist_session(sess)
 
     print(f"[Server] wrap generated for session='{session_id}'", flush=True)
     return {"wrap": wrap}
@@ -271,7 +197,6 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 async def _drain_event_queue(event_q: queue.Queue, on_done=None):
-    from agents.status_agent import StatusAgent, _TOOL_POOL_MAP
     # Start cycling "normal" status immediately — stops on first token
     status_agent = StatusAgent()
     status_phrase_q = status_agent.queue
@@ -317,8 +242,6 @@ async def _drain_event_queue(event_q: queue.Queue, on_done=None):
             yield _sse("status", {"text": data.get("text", "")})
 
         elif event_name == "done":
-            from config import SIGNAL_READY_TO_PROCEED
-
             if "response" in data:
                 reply = data["response"]
                 ready = data["ready_to_proceed"]
@@ -344,40 +267,46 @@ async def _drain_event_queue(event_q: queue.Queue, on_done=None):
 
 @app.post("/api/chat")
 async def chat_sse(req: ChatRequest):
-    sess = load_session(req.session_id, req.course_id)
-    if not sess:
-        raise HTTPException(status_code=404, detail="Session not found")
+    event_q = queue.Queue()
 
-    if sess.level_assessment_active:
-        from agents.level_agent import level_answer
+    def emit(event, data):
+        event_q.put((event, data))
 
-        async def level_chat():
-            loop = asyncio.get_event_loop()
-            sess.add_message("user", req.message)
-            result = await loop.run_in_executor(None, lambda: level_answer(sess, req.message))
-            reply  = result["response"]
-            done   = result["level_complete"]
+    def run():
+        try:
+            sess = load_context(req.session_id, req.course_id, emit=emit)
+            if not sess:
+                event_q.put(("error", {"message": "Session not found"}))
+                return
 
-            if reply:
-                sess.add_message("assistant", reply)
-                yield _sse("token", {"text": reply})
+            if sess.level_assessment_active:
+                sess.add_message("user", req.message)
+                result = level_answer(sess, req.message)
+                reply  = result["response"]
+                done   = result["level_complete"]
 
-            from mongo import save_course_session, save_user_profile
-            if done:
-                save_user_profile(req.course_id, req.session_id, {
-                    "user_level":   sess.user_level,
-                    "user_tactics": sess.user_tactics,
-                })
-                yield _sse("level_complete", {"level": sess.user_level, "tactics": sess.user_tactics})
+                if reply:
+                    sess.add_message("assistant", reply)
+                    emit("token", {"text": reply})
 
-            threading.Thread(target=save_course_session, args=(sess,), daemon=True).start()
-            yield _sse("result", {"ready_to_proceed": False})
+                if done:
+                    save_user_profile(req.course_id, req.session_id, {
+                        "user_level": sess.user_level, "user_tactics": sess.user_tactics,
+                    })
+                    emit("level_complete", {"level": sess.user_level, "tactics": sess.user_tactics})
 
-        return StreamingResponse(level_chat(), media_type="text/event-stream",
-                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+                persist_session(sess, background=True)
+                emit("done", {"response": "", "ready_to_proceed": False})
+                return
 
-    from agents.main_agent import chat_threaded
-    event_q = chat_threaded(sess, req.course_id, req.message)
+            result = agent_chat(sess, req.course_id, req.message, emit=emit)
+            persist_session(sess, background=True)
+            event_q.put(("done", result))
+
+        except Exception as e:
+            event_q.put(("error", {"message": str(e)}))
+
+    threading.Thread(target=run, daemon=True).start()
 
     return StreamingResponse(
         _drain_event_queue(event_q),

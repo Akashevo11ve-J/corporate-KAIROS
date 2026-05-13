@@ -100,6 +100,8 @@ _POOLS["normal"] = [
     "Cooking for you...",
     "Getting things ready...",
     "Loading up...",
+    "Moseying...",
+    "Almost Done...",
     "On it...",
     "Just a sec...",
     "Warming up...",
@@ -142,10 +144,8 @@ class StatusAgent:
         self._stop   = threading.Event()
         self.queue   = queue.Queue()
 
-    def start(self, tool_type: str, callback=None):
-        self._stop = threading.Event()
-        if callback is None:
-            callback = lambda msg: print(f"\n  ⟳ {msg}", flush=True)
+    def _start_loop(self, tool_type: str, callback):
+        self._stop   = threading.Event()
         self._thread = threading.Thread(
             target=_status_loop,
             args=(tool_type, callback, self._stop),
@@ -153,14 +153,13 @@ class StatusAgent:
         )
         self._thread.start()
 
+    def start(self, tool_type: str, callback=None):
+        if callback is None:
+            callback = lambda msg: print(f"\n  ⟳ {msg}", flush=True)
+        self._start_loop(tool_type, callback)
+
     def start_queued(self, tool_type: str):
-        self._stop = threading.Event()
-        self._thread = threading.Thread(
-            target=_status_loop,
-            args=(tool_type, self.queue.put, self._stop),
-            daemon=True,
-        )
-        self._thread.start()
+        self._start_loop(tool_type, self.queue.put)
 
     def stop(self):
         self._stop.set()

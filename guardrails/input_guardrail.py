@@ -1,10 +1,9 @@
 import time
-from anthropic import Anthropic
-from config import WORKER_MODEL, TEMP_GUARDRAIL
+from config import WORKER_MODEL, TEMP_GUARDRAIL, anthropic_client
 from prompts import INPUT_GUARDRAIL_SYSTEM, INPUT_GUARDRAIL_USER
 from utils import parse_llm_json
 
-_client = Anthropic()
+_client = anthropic_client
 
 # These are internal triggers — never classify them
 _BYPASS_MESSAGES = {"[slide loaded]"}

@@ -1,10 +1,12 @@
 import time
 import json
-from anthropic import Anthropic
-from config import WORKER_MODEL, MAX_TOKENS_WORKER, TEMP_WORKER
+from config import WORKER_MODEL, MAX_TOKENS_WORKER, TEMP_WORKER, anthropic_client
 from prompts import WORKER_SYSTEM, WORKER_SUMMARISE_HISTORY
+from mongo import fetch_item_description, _build_description_index
+from agents.level_agent import start_level_assessment
+from agents.observer_agent import get_observer_advice
 
-client = Anthropic()
+client = anthropic_client
 
 
 def _worker_call(prompt: str, task_label: str = "generic") -> str:
@@ -34,7 +36,6 @@ def execute_tool(tool_name: str, tool_input: dict, session, course_id: str) -> s
     """
 
     if tool_name == "fetch_slide_content":
-        from mongo import fetch_item_description
         item_id = tool_input["item_id"]
         print(f"[ToolExecutor] fetch_slide_content | item_id='{item_id}'", flush=True)
 
@@ -60,7 +61,7 @@ def execute_tool(tool_name: str, tool_input: dict, session, course_id: str) -> s
         video_id   = tool_input["video_id"]
         video_name = _resolve_video_name(course_id, video_id)
         print(f"[ToolExecutor] transcribe_full_video | video_id='{video_id}' | file='{video_name}'", flush=True)
-        from tools.video_processor import transcribe_full_video as _transcribe_full
+        from tools.video_processor import transcribe_full_video as _transcribe_full  # heavy optional dep
         raw    = _transcribe_full(video_name)
         result = (
             f"[Full Video Transcript: {video_id}]\n"
@@ -91,13 +92,11 @@ def execute_tool(tool_name: str, tool_input: dict, session, course_id: str) -> s
             # Already assessed — guard against double-call
             result = f"[LEVEL_ALREADY_SET] User level is '{session.user_level}'. Tactics: {session.user_tactics}. Do not call this again. IMPORTANT: Check the conversation history — you may have already introduced this slide or video before the assessment. Do NOT re-explain or re-introduce content you already covered. Pick up exactly where the conversation left off."
         else:
-            from agents.level_agent import start_level_assessment
             user_context = tool_input.get("user_context", "")
             first_question = start_level_assessment(session, user_context)
             result = f"[LEVEL_ASSESSMENT_STARTED]\n{first_question}"
 
     elif tool_name == "observe_learner":
-        from agents.observer_agent import get_observer_advice
         result = get_observer_advice(session)
 
     else:
@@ -113,7 +112,6 @@ def _resolve_video_name(course_id: str, video_id: str) -> str:
     Returns the slugified filename with .mp4 extension (matching S3 key format).
     Falls back to using video_id directly if not found.
     """
-    from mongo import _build_description_index
     index = _build_description_index(course_id)
     entry = index.get(video_id, {})
     # Prefer explicit video_name field; fall back to title
@@ -126,7 +124,7 @@ def _clip_and_transcribe(video_id: str, start_time: str, end_time: str,
                           what_user_wants: str, course_id: str) -> str:
     video_name = _resolve_video_name(course_id, video_id)
     print(f"[ToolExecutor] clip_and_transcribe | video='{video_name}' | {start_time}→{end_time}", flush=True)
-    from tools.video_processor import clip_and_transcribe as _clip
+    from tools.video_processor import clip_and_transcribe as _clip  # heavy optional dep
     raw = _clip(video_name, start_time, end_time)
     return (
         f"[Segment Transcript: {start_time} → {end_time}]\n"
@@ -138,6 +136,6 @@ def _clip_and_transcribe(video_id: str, start_time: str, end_time: str,
 def _extract_frame(video_id: str, timestamp: str, what_to_look_for: str, course_id: str) -> str:
     video_name = _resolve_video_name(course_id, video_id)
     print(f"[ToolExecutor] extract_frame | video='{video_name}' | t={timestamp}", flush=True)
-    from tools.video_processor import extract_frame as _frame
+    from tools.video_processor import extract_frame as _frame  # heavy optional dep
     description = _frame(video_name, timestamp, what_to_look_for)
     return f"[Frame at {timestamp}]\n\n{description}"

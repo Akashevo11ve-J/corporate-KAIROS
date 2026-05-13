@@ -1,8 +1,7 @@
-from anthropic import Anthropic
-from config import WORKER_MODEL
+from config import WORKER_MODEL, anthropic_client
 from session import Session
 
-client = Anthropic()
+client = anthropic_client
 
 
 def get_observer_advice(session: Session) -> str:

@@ -151,3 +151,23 @@ class Session:
         for m in self.full_history:
             lines.append(f"{m['role'].upper()}: {m['content']}")
         return "\n".join(lines[-40:])  # last 40 exchanges for assessment context
+
+    def set_current_item(self, item: dict):
+        """Set current item id and content context from a course item dict."""
+        self.current_item_id = item["id"]
+        self.current_content_context = item["title"] + "\n\n" + item.get("description", "")
+
+    def apply_slide_statuses(self, saved_statuses: dict):
+        """Apply saved slide statuses from DB onto course_items list."""
+        for item in self.course_items:
+            if item["id"] in saved_statuses:
+                item["status"] = saved_statuses[item["id"]]
+
+    def find_current_item(self, saved_item_id: str) -> dict | None:
+        """Find item by id, fall back to first item if not found."""
+        for item in self.course_items:
+            if item["id"] == saved_item_id:
+                return item
+        if self.course_items:
+            return self.course_items[0]
+        return None

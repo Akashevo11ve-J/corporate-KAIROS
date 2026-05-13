@@ -1,9 +1,8 @@
 import time
-from anthropic import Anthropic
-from config import WORKER_MODEL, TEMP_GUARDRAIL
+from config import WORKER_MODEL, TEMP_GUARDRAIL, anthropic_client
 from prompts import OUTPUT_GUARDRAIL_SYSTEM, OUTPUT_GUARDRAIL_USER
 
-_client = Anthropic()
+_client = anthropic_client
 
 
 def check_and_fix(

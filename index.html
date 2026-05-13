@@ -721,7 +721,7 @@ h1, h2, h3 {
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────────
-const API = "/kairos";
+const API = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" ? "" : "/kairos";
 let sessionId   = null;
 let courseId    = null;
 let courseItems = [];

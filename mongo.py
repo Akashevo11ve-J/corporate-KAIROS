@@ -9,7 +9,7 @@ from config import (
 
 _client = None
 
-def _get_db():
+def get_db():
     global _client
     if _client is None:
         print(f"[MongoDB] connecting to {MONGO_URI} / db={MONGO_DB}", flush=True)
@@ -24,7 +24,7 @@ def fetch_course_structure(course_id: str) -> tuple[list, str]:
     Returns (slides, course_wrap).
     Doc shape: { "course_id": "...", "slides": [...], "course_wrap": "..." }
     """
-    db  = _get_db()
+    db  = get_db()
     col = db[MONGO_COLLECTION_COURSE_STRUCT]
     doc = col.find_one({"course_id": course_id}, {"_id": 0})
 
@@ -50,7 +50,7 @@ def _build_description_index(course_id: str) -> dict:
     Returns: { "slide-01-welcome": { "description": "...", "image_name": "slide-01-welcome.png", "type": "slide" }, ... }
     The key is the slide ID (image_name without extension, or video_name slug).
     """
-    db  = _get_db()
+    db  = get_db()
     col = db[MONGO_COLLECTION_COURSE_DATA]
     doc = col.find_one({"course_id": course_id}, {"_id": 0, "content": 1})
 
@@ -112,7 +112,7 @@ def fetch_item_description(course_id: str, item_id: str) -> str:
 
 def clear_ongoing_statuses(course_id: str):
     """Strip 'ongoing' from all slides — called before marking a new slide ongoing."""
-    db  = _get_db()
+    db  = get_db()
     col = db[MONGO_COLLECTION_COURSE_STRUCT]
     doc = col.find_one({"course_id": course_id}, {"slides": 1})
     if not doc:
@@ -130,7 +130,7 @@ def update_item_status(course_id: str, item_id: str, status: str):
     Write 'ongoing' or 'completed' back to the items array inside course-structure.
     status: 'ongoing' | 'completed'
     """
-    db  = _get_db()
+    db  = get_db()
     col = db[MONGO_COLLECTION_COURSE_STRUCT]
     if status == "ongoing":
         clear_ongoing_statuses(course_id)
@@ -151,7 +151,7 @@ def save_user_profile(course_id: str, session_id: str, profile: dict):
     Upsert user profile into a 'user-profiles' collection.
     profile keys: name, role, skillsets (list), description
     """
-    db  = _get_db()
+    db  = get_db()
     col = db["user-profiles"]
     col.update_one(
         {"course_id": course_id, "session_id": session_id},
@@ -163,13 +163,13 @@ def save_user_profile(course_id: str, session_id: str, profile: dict):
 
 # ── Build course item list ───
 
-def build_course_items(course_id: str) -> list:
+def build_course_items_and_wrap(course_id: str) -> tuple[list, str]:
     """
-    Returns the ordered list of course items with descriptions.
+    Returns (items, course_wrap) in one pass — single fetch_course_structure call.
     """
-    structure, _ = fetch_course_structure(course_id)
+    structure, course_wrap = fetch_course_structure(course_id)
     if not structure:
-        return []
+        return [], course_wrap
 
     desc_index = _build_description_index(course_id)
 
@@ -187,15 +187,19 @@ def build_course_items(course_id: str) -> list:
             "description": entry.get("description", ""),
         })
 
-    print(f"[MongoDB] built {len(items)} course items for course_id='{course_id}'", flush=True)
+    print(f"[MongoDB] built {len(items)} course items + wrap for course_id='{course_id}'", flush=True)
+    return items, course_wrap
+
+
+def build_course_items(course_id: str) -> list:
+    """Convenience wrapper — returns items only."""
+    items, _ = build_course_items_and_wrap(course_id)
     return items
 
 
 def fetch_course_wrap(course_id: str) -> str:
-    """
-    Returns the course_wrap summary string for a given course.
-    """
-    _, course_wrap = fetch_course_structure(course_id)
+    """Convenience wrapper — returns wrap only."""
+    _, course_wrap = build_course_items_and_wrap(course_id)
     return course_wrap
 
 
@@ -206,7 +210,7 @@ def save_course_session(session) -> None:
     Upsert the full session state into course-session collection.
     Called after every chat turn.
     """
-    db  = _get_db()
+    db  = get_db()
     col = db["course-session"]
 
     doc = {
@@ -218,7 +222,6 @@ def save_course_session(session) -> None:
         "user_level":               session.user_level,
         "user_tactics":             session.user_tactics,
         "history":                  session.full_history,
-        "history_summary":          session.history_summary,
         "current_item_id":          session.current_item_id,
         "level_assessment_active":  session.level_assessment_active,
         "slide_statuses":           session.slide_statuses,
@@ -237,7 +240,7 @@ def load_course_session(session_id: str) -> dict | None:
     Load a previously saved session from course-session collection.
     Returns the raw doc or None if not found.
     """
-    db  = _get_db()
+    db  = get_db()
     col = db["course-session"]
     doc = col.find_one({"session_id": session_id}, {"_id": 0})
     if doc:

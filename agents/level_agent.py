@@ -14,13 +14,12 @@ Flow:
 """
 
 import re
-from anthropic import Anthropic
-from config import ASSESSMENT_MODEL, TEMP_LEVEL_AGENT
+from config import ASSESSMENT_MODEL, TEMP_LEVEL_AGENT, MAX_LEVEL_QUESTIONS, anthropic_client
 from session import Session
 from prompts import LEVEL_SYSTEM
 from utils import parse_llm_json
 
-client = Anthropic()
+client = anthropic_client
 
 
 def _build_level_messages(session: Session) -> list:
@@ -64,7 +63,6 @@ def _try_parse_json(text: str):
 
 
 def _build_system(session: Session, user_context: str) -> str:
-    from config import MAX_LEVEL_QUESTIONS
     return LEVEL_SYSTEM.format(
         user_context=user_context,
         slide_content=session.current_content_context,

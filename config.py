@@ -20,8 +20,8 @@ TEMP_GUARDRAIL    = 0.1   # classification — as deterministic as possible
 TEMP_WORKER       = 0.2   # compression — purely functional
 
 # ── Token limits ──────────────────────────────────────────────────────────────
-HISTORY_TOKEN_THRESHOLD = 1000
-MAX_TOKENS_RESPONSE     = 600
+HISTORY_TOKEN_THRESHOLD = 1026
+MAX_TOKENS_RESPONSE     = 1026
 MAX_TOKENS_WORKER       = 512
 MAX_TOKENS_ASSESSMENT   = 4096
 
@@ -40,7 +40,10 @@ MONGO_COLLECTION_COURSE_STRUCT = os.getenv("MONGO_COLLECTION_COURSE_STRUCTURE", 
 
 MAX_LEVEL_QUESTIONS = 5
 # ── Anthropic ─────────────────────────────────────────────────────────────────
-ANTHROPIC_API_KEY =  os.environ["ANTHROPIC_API_KEY"]
+ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
+
+from anthropic import Anthropic
+anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
 # ── OpenAI ────────────────────────────────────────────────────────────────────
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")

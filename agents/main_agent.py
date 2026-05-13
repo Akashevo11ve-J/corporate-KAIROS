@@ -1,15 +1,13 @@
 import json
 import threading
-import queue as _queue
 from concurrent.futures import ThreadPoolExecutor
-from anthropic import Anthropic
-from config import MAIN_AGENT_MODEL, MAX_TOKENS_RESPONSE, SIGNAL_READY_TO_PROCEED, TEMP_MAIN_AGENT
+from config import MAIN_AGENT_MODEL, MAX_TOKENS_RESPONSE, SIGNAL_READY_TO_PROCEED, TEMP_MAIN_AGENT, anthropic_client
 from prompts import MAIN_AGENT_SYSTEM, get_level_guidance
 from session import Session
 from tools.tool_schemas import TOOL_SCHEMAS, TOOL_STATUS_MAP
 from tools.tool_executor import execute_tool
 
-client = Anthropic()
+client = anthropic_client
 
 
 def _build_system_prompt(session: Session) -> str:
@@ -168,31 +166,12 @@ def chat(session: Session, course_id: str, user_message: str, emit=None) -> dict
 
     session.add_message("user", user_message)
 
-    token_count = session.get_recent_token_count()
-    print(f"[MainAgent] history tokens={token_count} | threshold={1000} | compress={token_count > 1000}", flush=True)
-
-    if session.needs_compression():
-        from tools.tool_executor import _worker_call
-        from prompts import WORKER_SUMMARISE_HISTORY
-        summary = _worker_call(
-            WORKER_SUMMARISE_HISTORY.format(history_text=session.get_history_text()),
-            task_label="auto_compress"
-        )
-        session.apply_compression(summary)
-
     messages = _build_messages(session)
     response_text, tools_used = _run_streaming_loop(session, course_id, messages, emit)
 
     session.add_message("assistant", response_text)
     ready_to_proceed = SIGNAL_READY_TO_PROCEED in response_text
     display_text     = response_text.replace(SIGNAL_READY_TO_PROCEED, "").strip()
-
-    # Save session to MongoDB
-    def _save():
-        from mongo import save_course_session
-        save_course_session(session)
-
-    threading.Thread(target=_save, daemon=True).start()
 
     return {
         "response":         display_text,
@@ -201,23 +180,5 @@ def chat(session: Session, course_id: str, user_message: str, emit=None) -> dict
         "tools_used":       tools_used,
     }
 
-
-# ── Threaded variants for server.py (FastAPI stays non-blocking) ──────────────
-
-def chat_threaded(session: Session, course_id: str, user_message: str) -> _queue.Queue:
-    event_q = _queue.Queue()
-
-    def emit(event, data):
-        event_q.put((event, data))
-
-    def run():
-        try:
-            result = chat(session, course_id, user_message, emit=emit)
-            event_q.put(("done", result))
-        except Exception as e:
-            event_q.put(("error", {"message": str(e)}))
-
-    threading.Thread(target=run, daemon=True).start()
-    return event_q
 
 
