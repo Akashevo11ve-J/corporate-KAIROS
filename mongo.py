@@ -3,7 +3,6 @@ from config import (
     MONGO_URI, MONGO_DB,
     MONGO_COLLECTION_COURSE_DATA,
     MONGO_COLLECTION_COURSE_STRUCT,
-    PINECONE_API_KEY, PINECONE_INDEX,
 )
 
 # ── MongoDB connection ───────
@@ -199,56 +198,6 @@ def build_course_items(course_id: str) -> list:
     return items
 
 
-# ── RAG search via Pinecone ──
-
-def rag_search(query: str, course_id: str, top_k: int = 3) -> str:
-    print(f"[RAG] search | query='{query}' | course_id='{course_id}' | top_k={top_k}", flush=True)
-
-    try:
-        from openai import OpenAI
-        import os
-
-        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
-        embed_resp = openai_client.embeddings.create(
-            model="text-embedding-3-small",
-            input=[query]
-        )
-        vector = embed_resp.data[0].embedding
-        print(f"[RAG] embedding created | dim={len(vector)}", flush=True)
-
-        from pinecone import Pinecone
-        pc    = Pinecone(api_key=PINECONE_API_KEY)
-        index = pc.Index(PINECONE_INDEX)
-
-        results = index.query(
-            vector=vector,
-            top_k=top_k,
-            include_metadata=True,
-            filter={"course_id": {"$eq": course_id}}
-        )
-
-        matches = results.get("matches", [])
-        matches = [m for m in matches if m.get("score", 0) >= 0.75]
-        print(f"[RAG] results | {len(matches)} matches returned", flush=True)
-        for m in matches:
-            score = round(m.get("score", 0), 3)
-            text  = m.get("metadata", {}).get("text", "")
-            print(f"  score={score} | '{text}'", flush=True)
-
-        if not matches:
-            return "No relevant content found in course material."
-
-        chunks = []
-        for m in matches:
-            text = m.get("metadata", {}).get("text", "").strip()
-            if text:
-                chunks.append(text)
-
-        return "\n\n---\n\n".join(chunks)
-
-    except Exception as e:
-        print(f"[RAG] ERROR: {e}", flush=True)
-        return f"RAG search failed: {e}"
 # ── Course session persistence ────────────────────────────────────────────────
 
 def save_course_session(session) -> None:
@@ -297,17 +246,3 @@ def load_course_session(session_id: str) -> dict | None:
     return doc
 
 
-if __name__ == "__main__":
-    course_id = "cashflow_001"
-
-    while True:
-        query = "cash flow training"
-
-        if query.lower() == "exit":
-            break
-
-        result = rag_search(query, course_id, top_k=3)
-
-        print("\n=== RAG RESULT ===")
-        print(result)
-        print("==================\n")

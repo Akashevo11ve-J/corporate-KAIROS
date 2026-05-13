@@ -2,7 +2,7 @@ import time
 import json
 from anthropic import Anthropic
 from config import WORKER_MODEL, MAX_TOKENS_WORKER, TEMP_WORKER
-from prompts import WORKER_SYSTEM, WORKER_SUMMARISE_HISTORY, WORKER_CONDENSE_RAG_QUERY
+from prompts import WORKER_SYSTEM, WORKER_SUMMARISE_HISTORY
 
 client = Anthropic()
 
@@ -26,33 +26,14 @@ def _worker_call(prompt: str, task_label: str = "generic") -> str:
     return result
 
 
-def condense_query_for_rag(raw_query: str) -> str:
-    """
-    Use the worker LLM to compress a verbose slide description or user question
-    into a tight, keyword-focused search query for Pinecone.
-    """
-    print("query sent to llm",raw_query)
-    prompt = WORKER_CONDENSE_RAG_QUERY.format(raw_query=raw_query)
-    condensed = _worker_call(prompt, task_label="condense_rag_query")
-    print(f"[RAGQuery] condensed: '{condensed}'", flush=True)
-    return condensed
-
-
 def execute_tool(tool_name: str, tool_input: dict, session, course_id: str) -> str:
     """
     Execute a tool call from the main agent.
     session  — the Session object (for state mutations like user_role)
-    course_id — passed through for mongo/rag calls
+    course_id — passed through for mongo calls
     """
 
-    if tool_name == "rag_search":
-        from mongo import rag_search
-        raw_query = tool_input["query"]
-        top_k     = min(int(tool_input.get("top_k", 3)), 7)  # agent can request up to 7
-        query     = condense_query_for_rag(raw_query)
-        result    = rag_search(query, course_id, top_k=top_k)
-
-    elif tool_name == "fetch_slide_content":
+    if tool_name == "fetch_slide_content":
         from mongo import fetch_item_description
         item_id = tool_input["item_id"]
         print(f"[ToolExecutor] fetch_slide_content | item_id='{item_id}'", flush=True)

@@ -26,7 +26,6 @@ def _build_system_prompt(session: Session) -> str:
         content_type=current_item.get("type", "slide"),
         course_progress_json=session.get_course_progress_json(),
         current_content_context=session.current_content_context,
-        rag_context=session.current_rag_context or "none",
         ready_signal=SIGNAL_READY_TO_PROCEED,
     )
 

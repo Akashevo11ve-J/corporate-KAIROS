@@ -32,18 +32,6 @@ _POOLS = {
         "Thinking out loud...",
         "Working it out...",
     ],
-    "rag": [
-        "Searching the material...",
-        "Digging through the course...",
-        "Scanning for context...",
-        "Pulling relevant bits...",
-        "Hunting through the content...",
-        "Sifting through the slides...",
-        "Looking this up...",
-        "Finding the right piece...",
-        "Combing through the notes...",
-        "Fetching more context...",
-    ],
     "slide": [
         "Pulling up that slide...",
         "Fetching the slide content...",
@@ -91,7 +79,6 @@ _POOLS = {
 }
 
 _TOOL_POOL_MAP = {
-    "rag_search":            "rag",
     "fetch_slide_content":   "slide",
     "clip_and_transcribe":   "video_clip",
     "transcribe_full_video": "transcribe",

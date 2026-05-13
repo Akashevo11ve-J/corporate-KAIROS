@@ -66,7 +66,6 @@ class Session:
     # Current content
     current_item_id: str = ""
     current_content_context: str = ""
-    current_rag_context: str = ""
 
     # User level (set once per course by level agent, never reset)
     user_level: str = ""

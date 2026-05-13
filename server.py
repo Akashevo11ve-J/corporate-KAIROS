@@ -53,7 +53,7 @@ def load_session(session_id: str, course_id: str):
         return _sessions[session_id]
 
     from session import Session
-    from mongo import build_course_items, rag_search, load_course_session
+    from mongo import build_course_items, load_course_session
 
     doc = load_course_session(session_id)
     if not doc:
@@ -86,13 +86,7 @@ def load_session(session_id: str, course_id: str):
     current_item  = next((i for i in items if i["id"] == saved_item_id), None) or (items[0] if items else None)
     if current_item:
         sess.current_item_id = current_item["id"]
-        from tools.tool_executor import condense_query_for_rag
-        rag_context = rag_search(
-            query=condense_query_for_rag(f"{current_item['title']} {current_item.get('description', '')}"),
-            course_id=course_id,
-        )
         sess.current_content_context = f"{current_item['title']}\n\n{current_item.get('description', '')}"
-        sess.current_rag_context     = rag_context
 
     _sessions[session_id] = sess
     print(f"[Server] session loaded | session_id='{session_id}' | history={len(full_history)} msgs", flush=True)
@@ -138,8 +132,7 @@ async def index():
 @app.post("/api/session/new", response_model=NewSessionResponse)
 async def new_session(req: NewSessionRequest):
     from session import Session
-    from mongo import build_course_items, rag_search, save_user_profile, save_course_session
-    from tools.tool_executor import condense_query_for_rag
+    from mongo import build_course_items, save_user_profile, save_course_session
     from config import VIDEO_URL, IMAGE_URL
 
     session_id = req.session_id.strip() or str(uuid.uuid4())[:8]
@@ -165,12 +158,7 @@ async def new_session(req: NewSessionRequest):
         first["status"]                  = "ongoing"
         sess.slide_statuses[first["id"]] = "ongoing"
 
-        rag_context = rag_search(
-            query=condense_query_for_rag(f"{first['title']} {first['description']}"),
-            course_id=req.course_id,
-        )
         sess.current_content_context = f"{first['title']}\n\n{first['description']}"
-        sess.current_rag_context     = rag_context
 
         if req.user_name or req.user_role:
             save_user_profile(req.course_id, session_id, {
@@ -239,8 +227,7 @@ async def get_session_messages(session_id: str):
 
 @app.post("/api/advance")
 async def advance(req: NavigateRequest):
-    from mongo import rag_search, save_course_session
-    from tools.tool_executor import condense_query_for_rag
+    from mongo import save_course_session
 
     sess = load_session(req.session_id, req.course_id)
     if not sess:
@@ -250,12 +237,7 @@ async def advance(req: NavigateRequest):
     item = sess.get_current_item()
 
     if item:
-        rag_context = rag_search(
-            query=condense_query_for_rag(f"{item['title']} {item['description']}"),
-            course_id=req.course_id,
-        )
         sess.current_content_context = f"{item['title']}\n\n{item['description']}"
-        sess.current_rag_context     = rag_context
 
     threading.Thread(target=save_course_session, args=(sess,), daemon=True).start()
     return {"ok": True, "current_item": item}

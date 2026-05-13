@@ -1,32 +1,5 @@
 TOOL_SCHEMAS = [
     {
-        "name": "rag_search",
-        "description": (
-            "Search the course content for more detailed or specific information. "
-            "Use this when the user asks something that goes deeper than what's in your current context, "
-            "or when you need additional material to explain a concept properly. "
-            "A RAG search is already done automatically when each slide loads — only call this if you genuinely need MORE or DIFFERENT information than what you already have. "
-            "Set top_k= "" only when the default 3 results are not enough to answer the question — Maximum is 7"
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "What you're searching for — be specific about the concept or topic."
-                },
-                "top_k": {
-                    "type": "integer",
-                    "description": "Number of results to retrieve. Default 3. Use 7 only when you need broader coverage. Max 7.",
-                    "default": 3,
-                    "minimum": 1,
-                    "maximum": 7
-                }
-            },
-            "required": ["query"]
-        }
-    },
-    {
         "name": "fetch_slide_content",
         "description": (
             "Fetch the full description of a PREVIOUSLY COMPLETED slide or video — only when "
@@ -184,7 +157,6 @@ TOOL_SCHEMAS = [
 
 TOOL_STATUS_MAP = {
     "assess_user_level":     "level",
-    "rag_search":            "rag",
     "fetch_slide_content":   "slide",
     "clip_and_transcribe":   "video_clip",
     "transcribe_full_video": "transcribe",

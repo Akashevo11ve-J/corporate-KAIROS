@@ -17,7 +17,7 @@ TEMP_MAIN_AGENT   = 0.7   # teaching — warm and natural but focused
 TEMP_ASSESSMENT   = 0.3   # MCQ generation — structured, consistent
 TEMP_LEVEL_AGENT  = 0.3   # calibration questions + JSON output
 TEMP_GUARDRAIL    = 0.1   # classification — as deterministic as possible
-TEMP_WORKER       = 0.2   # compression, RAG condense — purely functional
+TEMP_WORKER       = 0.2   # compression — purely functional
 
 # ── Token limits ──────────────────────────────────────────────────────────────
 HISTORY_TOKEN_THRESHOLD = 1000
@@ -37,10 +37,6 @@ MONGO_URI                      = os.getenv("MONGO_URI")
 MONGO_DB                       = os.getenv("MONGO_DB", "db")
 MONGO_COLLECTION_COURSE_DATA   = os.getenv("MONGO_COLLECTION_COURSE_DATA", "course-data")
 MONGO_COLLECTION_COURSE_STRUCT = os.getenv("MONGO_COLLECTION_COURSE_STRUCTURE", "course-structure")
-
-# ── Pinecone ──────────────────────────────────────────────────────────────────
-PINECONE_API_KEY   = os.getenv("PINECONE_API_KEY", "")
-PINECONE_INDEX     = os.getenv("PINECONE_INDEX", "poc-corporate")
 
 MAX_LEVEL_QUESTIONS = 5
 # ── Anthropic ─────────────────────────────────────────────────────────────────
