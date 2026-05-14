@@ -146,7 +146,6 @@ class Session:
                 found_current = True
 
     def get_history_messages(self) -> list:
-        """Full history as Anthropic messages list, content blocks flattened."""
         messages = []
         for m in self.full_history:
             c = m["content"]
@@ -154,8 +153,11 @@ class Session:
                 text = " ".join(b.get("text", "") for b in c if isinstance(b, dict)).strip()
             else:
                 text = str(c)
-            if text and text != "[slide loaded]":
-                messages.append({"role": m["role"], "content": text})
+            if not text:
+                continue
+            if text == "[slide loaded]":
+                text = "ok"
+            messages.append({"role": m["role"], "content": text})
         if not messages or messages[0]["role"] != "user":
             messages.insert(0, {"role": "user", "content": "begin"})
         return messages
