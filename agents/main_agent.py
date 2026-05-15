@@ -26,7 +26,7 @@ def _parse_tool_input(input_str: str) -> dict:
         return {}
 
 
-def _build_system_prompt(session: Session) -> list:
+def _build_system_prompt(session: Session, video_watch_status="no_video") -> list:
     current_item = session.get_current_item() or {}
     skillsets_str = ", ".join(session.user_skillsets)
 
@@ -49,11 +49,24 @@ def _build_system_prompt(session: Session) -> list:
         current_content_context=session.current_content_context,
     )
 
+    # Add video watch context if applicable
+    video_context = ""
+    if video_watch_status != "no_video":
+        video_context_map = {
+            "watched": "The user watched the video completely without significant skipping.",
+            "not_watched": "The user has NOT watched the video. They opened it but did not watch.",
+            "skipped_to_end": "The user did NOT watch the video properly. They used the seek bar to jump to the end.",
+            "partial_skip": "The user partially watched the video but skipped through sections."
+        }
+        context = video_context_map.get(video_watch_status, "")
+        if context:
+            video_context = f"\n\nCURRENT VIDEO WATCH STATUS: {context}"
+    dynamic_text += video_context
+
     return [
         {"type": "text", "text": static_text, "cache_control": {"type": "ephemeral", "ttl": "1h"}},
         {"type": "text", "text": dynamic_text},
     ]
-
 
 def _build_messages(session: Session) -> list:
     messages = list(session.recent_messages)
@@ -91,7 +104,7 @@ def _execute_tool_block(tb: dict, session: Session, course_id: str, tool_calls_m
     return {"type": "tool_result", "tool_use_id": tb["id"], "content": result}
 
 
-def _run_streaming_loop(session: Session, course_id: str, messages: list, emit) -> tuple[str, list]:
+def _run_streaming_loop(session: Session, course_id: str, messages: list, emit, video_watch_status="no_video") -> tuple[str, list]:
     tool_calls_made = []
     loop_messages = list(messages)
     full_text = ""
@@ -104,7 +117,7 @@ def _run_streaming_loop(session: Session, course_id: str, messages: list, emit) 
         current_tool = None
         stop_reason = None
 
-        system_blocks = _build_system_prompt(session)
+        system_blocks = _build_system_prompt(session, video_watch_status)
 
         with anthropic_client.beta.messages.stream(
             model=MAIN_AGENT_MODEL,
@@ -189,7 +202,7 @@ def _run_streaming_loop(session: Session, course_id: str, messages: list, emit) 
         emit("status", {"text": "Picking up where we left off…"})
 
 
-def chat(session: Session, course_id: str, user_message: str, emit=None) -> dict:
+def chat(session: Session, course_id: str, user_message: str, emit=None, video_watch_status="no_video") -> dict:
     if emit is None:
         def emit(event, data):
             if event == "token":
@@ -200,7 +213,7 @@ def chat(session: Session, course_id: str, user_message: str, emit=None) -> dict
     session.add_message("user", user_message)
 
     messages = _build_messages(session)
-    response_text, tools_used = _run_streaming_loop(session, course_id, messages, emit)
+    response_text, tools_used = _run_streaming_loop(session, course_id, messages, emit, video_watch_status)
 
     session.add_message("assistant", response_text)
 

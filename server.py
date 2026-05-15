@@ -64,6 +64,7 @@ class ChatRequest(BaseModel):
     session_id: str
     course_id:  str
     message:    str
+    video_watch_status: str = "no_video"  # watched, not_watched, skipped_to_end, partial_skip, no_video
 
 class NavigateRequest(BaseModel):
     session_id: str
@@ -315,7 +316,7 @@ async def chat_sse(req: ChatRequest):
                 emit("done", {"response": "", "ready_to_proceed": False})
                 return
 
-            result = agent_chat(sess, req.course_id, req.message, emit=emit)
+            result = agent_chat(sess, req.course_id, req.message, emit=emit, video_watch_status=req.video_watch_status)
             persist_session(sess, background=True)
             event_q.put(("done", result))
 

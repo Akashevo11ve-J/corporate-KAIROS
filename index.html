@@ -739,6 +739,19 @@ let busy        = false;
 let readyToProc = false;
 const visitedSlides = new Set();
 
+// ── Video tracking state ──
+let videoWatchData = {
+  hasVideo: false,
+  watchedDuration: 0,
+  totalDuration: 0,
+  playCount: 0,
+  seekCount: 0,
+  largestSeekForward: 0,
+  watchedSegments: [],
+  completed: false,
+  lastTime: 0
+};
+
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const courseEntry   = $("course-entry");
@@ -897,6 +910,98 @@ function updateProgress() {
   progressLbl.textContent  = `${currentIdx + 1} of ${total}`;
 }
 
+// ── Reset video tracking data ─────────────────────────────────────────────────
+function resetVideoTracking() {
+  videoWatchData = {
+    hasVideo: false,
+    watchedDuration: 0,
+    totalDuration: 0,
+    playCount: 0,
+    seekCount: 0,
+    largestSeekForward: 0,
+    watchedSegments: [],
+    completed: false,
+    lastTime: 0
+  };
+}
+
+// ── Analyze video watch behavior ──────────────────────────────────────────────
+function analyzeVideoWatchBehavior() {
+  if (!videoWatchData.hasVideo) return "no_video";
+  
+  const { watchedDuration, totalDuration, seekCount, largestSeekForward, completed } = videoWatchData;
+  
+  // No duration means video didn't load properly
+  if (totalDuration === 0) return "no_video";
+  
+  const watchPercentage = (watchedDuration / totalDuration) * 100;
+  
+  // User watched most of the video (>80%) with minimal seeking
+  if (watchPercentage > 80 && seekCount <= 2) {
+    return "watched";
+  }
+  
+  // User seeked significantly (jumped >30% of video duration at once)
+  if (largestSeekForward > totalDuration * 0.3) {
+    return "skipped_to_end";
+  }
+  
+  // User partially watched with multiple seeks
+  if (watchPercentage > 30 && seekCount > 3) {
+    return "partial_skip";
+  }
+  
+  // User barely watched
+  if (watchPercentage < 20) {
+    return "not_watched";
+  }
+  
+  // Default: partial watching
+  return "partial_skip";
+}
+
+// ── Video event handlers ──────────────────────────────────────────────────────
+function setupVideoTracking() {
+  slideVideo.addEventListener('loadedmetadata', () => {
+    videoWatchData.hasVideo = true;
+    videoWatchData.totalDuration = slideVideo.duration;
+  });
+
+  slideVideo.addEventListener('play', () => {
+    videoWatchData.playCount++;
+  });
+
+  slideVideo.addEventListener('timeupdate', () => {
+    const currentTime = slideVideo.currentTime;
+    const timeDiff = currentTime - videoWatchData.lastTime;
+    
+    // Detect forward seeking (user skipped ahead)
+    if (timeDiff > 2) {
+      videoWatchData.seekCount++;
+      if (timeDiff > videoWatchData.largestSeekForward) {
+        videoWatchData.largestSeekForward = timeDiff;
+      }
+    }
+    
+    // Track actual watched duration (only if playing normally)
+    if (timeDiff > 0 && timeDiff < 2) {
+      videoWatchData.watchedDuration += timeDiff;
+    }
+    
+    videoWatchData.lastTime = currentTime;
+  });
+
+  slideVideo.addEventListener('ended', () => {
+    videoWatchData.completed = true;
+  });
+
+  slideVideo.addEventListener('seeked', () => {
+    // Additional tracking for seek operations
+    const currentTime = slideVideo.currentTime;
+    videoWatchData.lastTime = currentTime;
+  });
+}
+
 // ── Load a slide ──────────────────────────────────────────────────────────────
 async function loadSlide(idx, isInit) {
   currentIdx  = idx;
@@ -907,6 +1012,9 @@ async function loadSlide(idx, isInit) {
   chatMessages.innerHTML     = "";
   hideStatus();
 
+  // Reset video tracking for new slide
+  resetVideoTracking();
+
   const item = courseItems[idx];
 
   slideTitle.textContent = item.title;
@@ -916,6 +1024,7 @@ async function loadSlide(idx, isInit) {
     slideVidWrap.style.display = "block";
     slideVideoSrc.src = `${VIDEO_URL}/${courseId}/${item.video_name}.mp4`;
     slideVideo.load();
+    videoWatchData.hasVideo = true;
   } else {
     slideVidWrap.style.display = "none";
     slideImgWrap.style.display = "block";
@@ -943,10 +1052,19 @@ async function loadSlide(idx, isInit) {
   visitedSlides.add(idx);
   setBusy(true);
   const loadedMsg = item.type === "video" ? "[video loaded]" : "[slide loaded]";
+  
+  // Get video watch status
+  const videoStatus = analyzeVideoWatchBehavior();
+  
   const resp = await fetch(`${API}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: sessionId, course_id: courseId, message: loadedMsg }),
+    body: JSON.stringify({
+      session_id: sessionId,
+      course_id: courseId,
+      message: loadedMsg,
+      video_watch_status: videoStatus
+    }),
   });
   await consumeStream(resp);
 }
@@ -960,10 +1078,19 @@ async function sendMessage() {
   autoGrow();
   appendMessage("user", text);
   setBusy(true);
+  
+  // Get current video watch status
+  const videoStatus = analyzeVideoWatchBehavior();
+  
   const resp = await fetch(`${API}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: sessionId, course_id: courseId, message: text }),
+    body: JSON.stringify({
+      session_id: sessionId,
+      course_id: courseId,
+      message: text,
+      video_watch_status: videoStatus
+    }),
   });
 
   await consumeStream(resp);
@@ -1168,6 +1295,9 @@ document.addEventListener("click", e => {
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
+// Setup video tracking
+setupVideoTracking();
+
 // Entry screen handles init — no auto-boot
 </script>
 </body>
