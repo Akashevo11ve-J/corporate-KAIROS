@@ -8,9 +8,9 @@ from pathlib import Path
 load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
 
 # ── Models ───────────────────────────────────────────────────────────────────
-MAIN_AGENT_MODEL   = "claude-sonnet-4-6"
+MAIN_AGENT_MODEL   = "claude-haiku-4-5-20251001"
 WORKER_MODEL       = "claude-haiku-4-5-20251001"
-ASSESSMENT_MODEL   = "claude-sonnet-4-6"
+ASSESSMENT_MODEL   = "claude-haiku-4-5-20251001"
 
 # ── Temperatures ──────────────────────────────────────────────────────────────
 TEMP_MAIN_AGENT   = 0.45   # teaching — warm and natural but focused
@@ -20,14 +20,15 @@ TEMP_GUARDRAIL    = 0.1   # classification — as deterministic as possible
 TEMP_WORKER       = 0.2   # compression — purely functional
 
 # ── Token limits ──────────────────────────────────────────────────────────────
-HISTORY_TOKEN_THRESHOLD = 1026
+HISTORY_TOKEN_THRESHOLD = 10
 MAX_TOKENS_RESPONSE     = 1026
 MAX_TOKENS_WORKER       = 512
 MAX_TOKENS_ASSESSMENT   = 4096
 
 # ── Signals ───────────────────────────────────────────────────────────────────
-SIGNAL_READY_TO_PROCEED = "[READY_TO_PROCEED]"
-SIGNAL_TOPIC_COMPLETE   = "[TOPIC_COMPLETE]"
+SIGNAL_READY_TO_PROCEED   = "[READY_TO_PROCEED]"
+SIGNAL_IMMEDIATE_PROCEED  = "[IMMEDIATE_PROCEED]"
+SIGNAL_TOPIC_COMPLETE     = "[TOPIC_COMPLETE]"
 
 # ── Assessment ────────────────────────────────────────────────────────────────
 ASSESSMENT_QUESTION_COUNT = 5
