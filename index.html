@@ -1100,7 +1100,11 @@ function appendToken(bubble, chunk) {
 
 function finaliseBubble(bubble) {
   bubble.classList.remove("live");
-  bubble.dataset.raw = bubble.dataset.raw.replace(/\[READY_TO_PROCEED\]/g, "").trim();
+  bubble.dataset.raw = bubble.dataset.raw.replace(/\[READY_TO_PROCEED\]/g, "").replace(/\[IMMEDIATE_PROCEED\]/g, "").trim();
+  if (!bubble.dataset.raw) {
+    bubble.closest(".msg").remove();
+    return;
+  }
   bubble.innerHTML = escapeHtml(bubble.dataset.raw);
 }
 
