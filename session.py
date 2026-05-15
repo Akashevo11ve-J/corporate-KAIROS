@@ -1,43 +1,15 @@
-"""
-Session State — manages everything about a user's current session.
-In production this would be backed by Redis + PostgreSQL.
-For POC: in-memory only.
-"""
-
 import json
-import tiktoken
 from dataclasses import dataclass, field
 from typing import Optional
+
+import tiktoken
+
 from config import HISTORY_TOKEN_THRESHOLD
 
 
-# def count_tokens(text: str) -> int:
-#     """Approximate token count using cl100k_base."""
-#     try:
-#         enc = tiktoken.get_encoding("cl100k_base")
-#         return len(enc.encode(text))
-#     except Exception:
-#         return len(text) // 4  # rough fallback
-
-
 def count_tokens(text: str) -> int:
-
     enc = tiktoken.get_encoding("cl100k_base")
     return len(enc.encode(text))
-
-@dataclass
-class CourseItem:
-    id: str
-    type: str          # "slide" | "video"
-    title: str
-    status: str        # "completed" | "current" | "upcoming"
-    description: str = ""
-
-
-@dataclass
-class Message:
-    role: str          # "user" | "assistant"
-    content: str
 
 
 @dataclass
@@ -47,7 +19,6 @@ class Session:
     # User profile (filled from entry screen, not by agent onboarding)
     user_name: str = ""
     user_role: str = ""
-    user_role_detail: str = ""
     user_skillsets: list = field(default_factory=list)
     user_description: str = ""
 
@@ -80,10 +51,22 @@ class Session:
     # Per-session slide/video progress — keyed by item_id
     slide_statuses: dict = field(default_factory=dict)
 
+    # Per-topic compressed summaries — keyed by item_id, loaded from DB
+    topic_summaries: dict = field(default_factory=dict)
+
+    # Messages for the current topic only (since the last [slide/video loaded] boundary)
+    # Reset each time set_current_item() is called. Used for per-topic compression on advance.
+    current_topic_messages: list = field(default_factory=list)
+
+    # Messages added this request — appended to Mongo via $push, not $set
+    new_messages_to_persist: list = field(default_factory=list)
+
     def add_message(self, role: str, content: str):
         msg = {"role": role, "content": content}
         self.full_history.append(msg)
         self.recent_messages.append(msg)
+        self.current_topic_messages.append(msg)
+        self.new_messages_to_persist.append(msg)
 
     def get_history_text(self) -> str:
         """Full history as plain text for summarisation."""
@@ -93,19 +76,16 @@ class Session:
         return "\n".join(lines)
 
     def get_recent_token_count(self) -> int:
-        parts = []
-        for m in self.recent_messages:
-            c = m["content"]
-            if isinstance(c, str):
-                parts.append(c)
-            elif isinstance(c, list):
-                for block in c:
+        parts = [self.history_summary] if self.history_summary else []
+        for msg in self.recent_messages:
+            content = msg["content"]
+            if isinstance(content, str):
+                parts.append(content)
+            elif isinstance(content, list):
+                for block in content:
                     if isinstance(block, dict):
                         parts.append(block.get("text", "") or block.get("content", ""))
-        text = " ".join(parts)
-        if self.history_summary:
-            text = self.history_summary + " " + text
-        return count_tokens(text)
+        return count_tokens(" ".join(parts))
 
     def needs_compression(self) -> bool:
         return self.get_recent_token_count() > HISTORY_TOKEN_THRESHOLD
@@ -133,33 +113,50 @@ class Session:
         return None
 
     def advance_to_next(self):
-        found_current = False
-        for item in self.course_items:
-            if found_current and item["status"] != "completed":
-                item["status"] = "ongoing"
-                self.slide_statuses[item["id"]] = "ongoing"
-                self.current_item_id = item["id"]
-                break
+        current_idx = None
+        for i, item in enumerate(self.course_items):
             if item["id"] == self.current_item_id:
-                item["status"] = "completed"
-                self.slide_statuses[item["id"]] = "completed"
-                found_current = True
+                current_idx = i
+                break
+
+        if current_idx is None:
+            return
+
+        current = self.course_items[current_idx]
+        current["status"] = "completed"
+        self.slide_statuses[current["id"]] = "completed"
+
+        for next_item in self.course_items[current_idx + 1:]:
+            if next_item["status"] != "completed":
+                next_item["status"] = "ongoing"
+                self.slide_statuses[next_item["id"]] = "ongoing"
+                self.current_item_id = next_item["id"]
+                return
 
     def get_history_messages(self) -> list:
         messages = []
-        for m in self.full_history:
-            c = m["content"]
-            if isinstance(c, list):
-                text = " ".join(b.get("text", "") for b in c if isinstance(b, dict)).strip()
+
+        for msg in self.full_history:
+            content = msg["content"]
+
+            if isinstance(content, list):
+                text = " ".join(b.get("text", "") for b in content if isinstance(b, dict)).strip()
             else:
-                text = str(c)
+                text = str(content)
+
             if not text:
                 continue
+
+            # Replace the internal slide-load trigger with a neutral word
             if text == "[slide loaded]":
                 text = "ok"
-            messages.append({"role": m["role"], "content": text})
+
+            messages.append({"role": msg["role"], "content": text})
+
+        # Level agent requires history to start with a user message
         if not messages or messages[0]["role"] != "user":
             messages.insert(0, {"role": "user", "content": "begin"})
+
         return messages
 
     def get_topic_history_text(self) -> str:
@@ -168,9 +165,10 @@ class Session:
         )
 
     def set_current_item(self, item: dict):
-        """Set current item id and content context from a course item dict."""
+        """Set current item and reset the per-topic message buffer."""
         self.current_item_id = item["id"]
         self.current_content_context = item["title"] + "\n\n" + item.get("description", "")
+        self.current_topic_messages = []
 
     def apply_slide_statuses(self, saved_statuses: dict):
         """Apply saved slide statuses from DB onto course_items list."""

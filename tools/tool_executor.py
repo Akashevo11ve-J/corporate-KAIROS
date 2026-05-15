@@ -1,31 +1,11 @@
-import time
 import json
-from config import WORKER_MODEL, MAX_TOKENS_WORKER, TEMP_WORKER, anthropic_client
-from prompts import WORKER_SYSTEM, WORKER_SUMMARISE_HISTORY
-from mongo import fetch_item_description, _build_description_index
+
+from mongo import _build_description_index, fetch_item_description
+from prompts import WORKER_SUMMARISE_HISTORY
+from topic_compressor import build_prior_context_block
+from worker import worker_call
 from agents.level_agent import start_level_assessment
 from agents.observer_agent import get_observer_advice
-
-client = anthropic_client
-
-
-def _worker_call(prompt: str, task_label: str = "generic") -> str:
-    print(f"[WorkerAgent] task='{task_label}' | model={WORKER_MODEL}", flush=True)
-    print(f"[WorkerAgent] prompt ({len(prompt)} chars): {prompt[:300]}", flush=True)
-
-    t0 = time.time()
-    response = client.messages.create(
-        model=WORKER_MODEL,
-        max_tokens=MAX_TOKENS_WORKER,
-        temperature=TEMP_WORKER,
-        system=WORKER_SYSTEM,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    elapsed = int((time.time() - t0) * 1000)
-    result  = response.content[0].text.strip()
-
-    print(f"[WorkerAgent] done ({elapsed}ms) | result ({len(result)} chars): {result[:300]}", flush=True)
-    return result
 
 
 def execute_tool(tool_name: str, tool_input: dict, session, course_id: str) -> str:
@@ -80,7 +60,7 @@ def execute_tool(tool_name: str, tool_input: dict, session, course_id: str) -> s
 
     elif tool_name == "summarise_history":
         print(f"[ToolExecutor] summarise_history | tokens={session.get_recent_token_count()}", flush=True)
-        summary = _worker_call(
+        summary = worker_call(
             WORKER_SUMMARISE_HISTORY.format(history_text=session.get_history_text()),
             task_label="summarise_history"
         )
@@ -98,6 +78,15 @@ def execute_tool(tool_name: str, tool_input: dict, session, course_id: str) -> s
 
     elif tool_name == "observe_learner":
         result = get_observer_advice(session)
+
+    elif tool_name == "get_topic_history":
+        query = tool_input.get("query", "")
+        print(f"[ToolExecutor] get_topic_history | query='{query[:120]}'", flush=True)
+        result = build_prior_context_block(
+            session.topic_summaries, session.course_items, session.current_item_id
+        )
+        if not result:
+            result = "No prior topic summaries available yet."
 
     else:
         print(f"[ToolExecutor] ERROR: unknown tool '{tool_name}'", flush=True)

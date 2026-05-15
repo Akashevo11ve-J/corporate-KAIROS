@@ -1,8 +1,10 @@
+from pathlib import Path
 from pymongo import MongoClient
 from config import (
-    MONGO_URI, MONGO_DB,
     MONGO_COLLECTION_COURSE_DATA,
     MONGO_COLLECTION_COURSE_STRUCT,
+    MONGO_DB,
+    MONGO_URI,
 )
 
 # ── MongoDB connection ───────
@@ -20,10 +22,6 @@ def get_db():
 # ── Course structure ─────────
 
 def fetch_course_structure(course_id: str) -> tuple[list, str]:
-    """
-    Returns (slides, course_wrap).
-    Doc shape: { "course_id": "...", "slides": [...], "course_wrap": "..." }
-    """
     db  = get_db()
     col = db[MONGO_COLLECTION_COURSE_STRUCT]
     doc = col.find_one({"course_id": course_id}, {"_id": 0})
@@ -42,14 +40,6 @@ def fetch_course_structure(course_id: str) -> tuple[list, str]:
 
 
 def _build_description_index(course_id: str) -> dict:
-    """
-    Actual doc shape in DB:
-    { "course_id": "cashflow_001", "content": [{ "type": "image", "image_name": "slide-01-welcome.png", "description": "..." }, ...] }
-    Videos use "video_name" instead of "image_name".
-
-    Returns: { "slide-01-welcome": { "description": "...", "image_name": "slide-01-welcome.png", "type": "slide" }, ... }
-    The key is the slide ID (image_name without extension, or video_name slug).
-    """
     db  = get_db()
     col = db[MONGO_COLLECTION_COURSE_DATA]
     doc = col.find_one({"course_id": course_id}, {"_id": 0, "content": 1})
@@ -73,9 +63,8 @@ def _build_description_index(course_id: str) -> dict:
                 "type":        "slide",
             }
         elif "video_name" in entry:
-            name  = entry["video_name"]
-            key   = name
-            index[key] = {
+            name = entry["video_name"]
+            index[name] = {
                 "description": entry.get("description", ""),
                 "image_name":  "",
                 "video_name":  name,
@@ -88,16 +77,13 @@ def _build_description_index(course_id: str) -> dict:
 
 
 def _title_from_filename(filename: str) -> str:
-    """'slide-02-daily-impact.png' → 'Daily Impact'"""
-    name  = filename.replace(".png", "").replace(".jpg", "")
-    parts = name.split("-")
+    parts = Path(filename).stem.split("-")
     # Drop leading word "slide"/"video" and any numeric parts
     words = [p for p in parts if not p.isdigit() and p.lower() not in ("slide", "video")]
     return " ".join(w.capitalize() for w in words)
 
 
 def fetch_item_description(course_id: str, item_id: str) -> str:
-    """Fetch description for a single item by its ID."""
     index = _build_description_index(course_id)
     entry = index.get(item_id, {})
     desc  = entry.get("description", "")
@@ -108,10 +94,7 @@ def fetch_item_description(course_id: str, item_id: str) -> str:
     return desc
 
 
-# ── Write slide progress back to MongoDB ────────────────────────────────────
-
 def clear_ongoing_statuses(course_id: str):
-    """Strip 'ongoing' from all slides — called before marking a new slide ongoing."""
     db  = get_db()
     col = db[MONGO_COLLECTION_COURSE_STRUCT]
     doc = col.find_one({"course_id": course_id}, {"slides": 1})
@@ -126,10 +109,6 @@ def clear_ongoing_statuses(course_id: str):
 
 
 def update_item_status(course_id: str, item_id: str, status: str):
-    """
-    Write 'ongoing' or 'completed' back to the items array inside course-structure.
-    status: 'ongoing' | 'completed'
-    """
     db  = get_db()
     col = db[MONGO_COLLECTION_COURSE_STRUCT]
     if status == "ongoing":
@@ -147,10 +126,6 @@ def update_item_status(course_id: str, item_id: str, status: str):
 # ── Save / fetch user profile ─────────────────────────────────────────────────
 
 def save_user_profile(course_id: str, session_id: str, profile: dict):
-    """
-    Upsert user profile into a 'user-profiles' collection.
-    profile keys: name, role, skillsets (list), description
-    """
     db  = get_db()
     col = db["user-profiles"]
     col.update_one(
@@ -164,9 +139,6 @@ def save_user_profile(course_id: str, session_id: str, profile: dict):
 # ── Build course item list ───
 
 def build_course_items_and_wrap(course_id: str) -> tuple[list, str]:
-    """
-    Returns (items, course_wrap) in one pass — single fetch_course_structure call.
-    """
     structure, course_wrap = fetch_course_structure(course_id)
     if not structure:
         return [], course_wrap
@@ -192,28 +164,37 @@ def build_course_items_and_wrap(course_id: str) -> tuple[list, str]:
 
 
 def build_course_items(course_id: str) -> list:
-    """Convenience wrapper — returns items only."""
     items, _ = build_course_items_and_wrap(course_id)
     return items
 
 
 def fetch_course_wrap(course_id: str) -> str:
-    """Convenience wrapper — returns wrap only."""
     _, course_wrap = build_course_items_and_wrap(course_id)
     return course_wrap
+
+
+# ── Topic summary persistence ────────────────────────────────────────────────
+
+def save_topic_summary(session_id: str, item_id: str, summary: str,
+                       existing_summaries: dict) -> None:
+    db  = get_db()
+    col = db["course-session"]
+    updated = {**existing_summaries, item_id: summary}
+    col.update_one(
+        {"session_id": session_id},
+        {"$set": {"topic_summaries": updated}},
+        upsert=True,
+    )
+    print(f"[MongoDB] topic summary saved | session='{session_id}' | item='{item_id}'", flush=True)
 
 
 # ── Course session persistence ────────────────────────────────────────────────
 
 def save_course_session(session) -> None:
-    """
-    Upsert the full session state into course-session collection.
-    Called after every chat turn.
-    """
     db  = get_db()
     col = db["course-session"]
 
-    doc = {
+    fields = {
         "session_id":               session.session_id,
         "user_name":                session.user_name,
         "user_role":                session.user_role,
@@ -221,25 +202,31 @@ def save_course_session(session) -> None:
         "user_skillsets":           session.user_skillsets,
         "user_level":               session.user_level,
         "user_tactics":             session.user_tactics,
-        "history":                  session.full_history,
         "current_item_id":          session.current_item_id,
         "level_assessment_active":  session.level_assessment_active,
         "slide_statuses":           session.slide_statuses,
     }
 
-    col.update_one(
-        {"session_id": session.session_id},
-        {"$set": doc},
-        upsert=True
-    )
+    new_msgs = getattr(session, "new_messages_to_persist", [])
+
+    if new_msgs:
+        col.update_one(
+            {"session_id": session.session_id},
+            {"$set": fields, "$push": {"history": {"$each": new_msgs}}},
+            upsert=True,
+        )
+        session.new_messages_to_persist = []
+    else:
+        col.update_one(
+            {"session_id": session.session_id},
+            {"$set": fields},
+            upsert=True,
+        )
+
     print(f"[MongoDB] session saved | session_id='{session.session_id}' | history={len(session.full_history)} msgs", flush=True)
 
 
 def load_course_session(session_id: str) -> dict | None:
-    """
-    Load a previously saved session from course-session collection.
-    Returns the raw doc or None if not found.
-    """
     db  = get_db()
     col = db["course-session"]
     doc = col.find_one({"session_id": session_id}, {"_id": 0})

@@ -1,4 +1,25 @@
+from config import TOPIC_SUMMARY_LOOKBACK
+
 TOOL_SCHEMAS = [
+    {
+        "name": "get_topic_history",
+        "description": (
+            f"Fetch summaries of up to the last {TOPIC_SUMMARY_LOOKBACK} topics the learner completed before the current one. "
+            "Call this when the user references something from a previous slide or video, "
+            "or when you need context about what they already covered and how they engaged with it. "
+            "Pass a short note describing what you're looking for."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "What you need from the prior topics — e.g. 'how the user engaged with cashflow basics'."
+                }
+            },
+            "required": ["query"]
+        }
+    },
     {
         "name": "fetch_slide_content",
         "description": (
@@ -130,28 +151,29 @@ TOOL_SCHEMAS = [
         }
     },
     {
-  "name": "assess_user_level",
-  "description": "Call this ONCE before explaining the first real learning unit (slide or video)...",
-  "input_schema": {
-    "type": "object",
-    "properties": {
-      "content_type": {
-        "type": "string",
-        "enum": ["slide", "video"],
-        "description": "Whether the current content is a slide or a video."
-      },
-      "title": {
-        "type": "string",
-        "description": "Title of the slide or video."
-      },
-      "user_context": {
-        "type": "string",
-        "description": "Short note about learner background."
-      }
+        "name": "assess_user_level",
+        "description": "Call this ONCE before explaining the first real learning unit (slide or video)...",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "content_type": {
+                    "type": "string",
+                    "enum": ["slide", "video"],
+                    "description": "Whether the current content is a slide or a video."
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Title of the slide or video."
+                },
+                "user_context": {
+                    "type": "string",
+                    "description": "Short note about learner background."
+                }
+            },
+            "required": ["content_type", "title", "user_context"]
+        },
+        "cache_control": {"type": "ephemeral", "ttl": "1h"},
     },
-    "required": ["content_type", "title", "user_context"]
-  }
-},
 ]
 
 
@@ -163,4 +185,5 @@ TOOL_STATUS_MAP = {
     "extract_frame":         "frame",
     "summarise_history":     "summarise",
     "observe_learner":       "observer",
+    "get_topic_history":     "history",
 }

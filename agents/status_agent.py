@@ -4,8 +4,6 @@ import time
 import queue
 import random
 
-import logger
-
 # ── Word pools per tool type ───────────────────────────────────────────────────
 # Each entry is a list of short phrases. One is picked randomly each tick.
 
@@ -139,7 +137,6 @@ def _status_loop(tool_type: str, callback, stop_event: threading.Event):
     while not stop_event.is_set():
         msg = _pick(tool_type, last)
         last = msg
-        logger.log_status_agent(msg)
         callback(msg)
 
         for _ in range(30):   # 30 × 100ms = 3s per message

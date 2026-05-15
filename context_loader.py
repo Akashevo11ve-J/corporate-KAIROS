@@ -1,11 +1,11 @@
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-import tiktoken
-
 from config import HISTORY_TOKEN_THRESHOLD
-from mongo import build_course_items_and_wrap, load_course_session, get_db
-from session import Session
+from mongo import build_course_items_and_wrap, get_db, load_course_session
+from prompts import WORKER_SUMMARISE_HISTORY
+from session import Session, count_tokens
+from worker import worker_call
 
 
 # ── Process-level course cache (course structure never changes) ───────────────
@@ -23,30 +23,27 @@ def _get_course_data(course_id: str) -> tuple[list, str]:
     return items, wrap
 
 
-# ── Token counting ────────────────────────────────────────────────────────────
 
-def _count_tokens(messages: list, prefix: str = "") -> int:
-    enc = tiktoken.get_encoding("cl100k_base")
-    parts = [prefix] if prefix else []
-    for m in messages:
-        c = m.get("content", "")
-        if isinstance(c, str):
-            parts.append(c)
-        elif isinstance(c, list):
-            for block in c:
-                if isinstance(block, dict):
-                    parts.append(block.get("text", "") or block.get("content", ""))
-    return len(enc.encode(" ".join(parts)))
+# ── Per-topic message extraction ─────────────────────────────────────────────
+
+def _extract_current_topic_messages(history: list, current_item_id: str) -> list:
+    _LOAD_SENTINELS = {"[slide loaded]", "[video loaded]"}
+    boundary_idx = None
+    for i in range(len(history) - 1, -1, -1):
+        msg = history[i]
+        if msg.get("role") == "user" and msg.get("content") in _LOAD_SENTINELS:
+            boundary_idx = i
+            break
+
+    if boundary_idx is not None:
+        return [m for m in history[boundary_idx:] if "role" in m]
+
+    return [m for m in history if "role" in m]
 
 
 # ── History: find compression marker, split into summary + recent ─────────────
 
 def _split_history(history: list) -> tuple[str, list]:
-    """
-    Scan history from the end for the latest 'compressed' marker.
-    Returns (summary_str, recent_messages_after_marker).
-    If no marker found, summary is "" and recent = full history.
-    """
     for i in range(len(history) - 1, -1, -1):
         if "compressed" in history[i]:
             summary        = history[i]["compressed"]
@@ -74,11 +71,16 @@ def save_compression_marker(session_id: str, old_marker_idx, new_marker_idx: int
 def _compress_if_needed(session_id: str, history: list,
                          summary: str, recent: list,
                          emit=None) -> tuple[str, list]:
-    """
-    Check token count. If over threshold, compress and persist marker to DB.
-    Returns updated (summary, recent).
-    """
-    token_count = _count_tokens(recent, prefix=summary)
+    parts = [summary] if summary else []
+    for m in recent:
+        c = m.get("content", "")
+        if isinstance(c, str):
+            parts.append(c)
+        elif isinstance(c, list):
+            for block in c:
+                if isinstance(block, dict):
+                    parts.append(block.get("text", "") or block.get("content", ""))
+    token_count = count_tokens(" ".join(parts))
     print(f"[ContextLoader] tokens={token_count} | threshold={HISTORY_TOKEN_THRESHOLD}", flush=True)
 
     if token_count <= HISTORY_TOKEN_THRESHOLD:
@@ -88,35 +90,38 @@ def _compress_if_needed(session_id: str, history: list,
     if emit:
         emit("tool_start", {"tool": "summarise_history", "label": "summarise"})
 
-    from tools.tool_executor import _worker_call
-    from prompts import WORKER_SUMMARISE_HISTORY
-
-    # Build text: previous summary + recent messages
+    # Build the text block to summarise: previous summary + recent readable messages
     history_lines = []
     if summary:
         history_lines.append(f"PREVIOUS SUMMARY:\n{summary}")
-    for m in recent:
-        c = m.get("content", "")
-        if isinstance(c, str) and c != "[slide loaded]":
-            history_lines.append(f"{m['role'].upper()}: {c}")
+    for msg in recent:
+        content = msg.get("content", "")
+        if isinstance(content, str) and content != "[slide loaded]":
+            history_lines.append(f"{msg['role'].upper()}: {content}")
     history_text = "\n".join(history_lines)
 
-    new_summary = _worker_call(
+    new_summary = worker_call(
         WORKER_SUMMARISE_HISTORY.format(history_text=history_text),
         task_label="auto_compress"
     )
 
-    # Find old marker index
+    # Find where the previous compression marker was (if any)
     old_marker_idx = None
     for i in range(len(history) - 1, -1, -1):
         if "compressed" in history[i]:
             old_marker_idx = i
             break
 
-    # New marker = index of last message in recent batch
-    # recent messages start right after old marker (or from 0)
+    # New marker points at the last message in the current recent batch
     start_of_recent = (old_marker_idx + 1) if old_marker_idx is not None else 0
-    new_marker_idx  = start_of_recent + len(recent) - 1
+    new_marker_idx = start_of_recent + len(recent) - 1
+
+    fresh_recent = recent[-5:]
+
+    if emit:
+        emit("tool_done", {"tool": "summarise_history"})
+
+    print(f"[ContextLoader] compressed | old_marker={old_marker_idx} new_marker={new_marker_idx}", flush=True)
 
     threading.Thread(
         target=save_compression_marker,
@@ -124,24 +129,12 @@ def _compress_if_needed(session_id: str, history: list,
         daemon=True,
     ).start()
 
-    # Keep last 5 recent messages as the fresh window
-    fresh_recent = recent[-5:]
-
-    if emit:
-        emit("tool_done", {"tool": "summarise_history"})
-
-    print(f"[ContextLoader] compressed | old_marker={old_marker_idx} new_marker={new_marker_idx}", flush=True)
     return new_summary, fresh_recent
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def load_context(session_id: str, course_id: str, emit=None) -> Session | None:
-    """
-    Load everything needed for one request in parallel.
-    Returns a fully assembled Session, or None if session_id not found.
-    compress if history is over threshold — shows loader via emit.
-    """
     with ThreadPoolExecutor(max_workers=2) as pool:
         f_doc   = pool.submit(load_course_session, session_id)
         f_items = pool.submit(_get_course_data, course_id)
@@ -174,6 +167,7 @@ def load_context(session_id: str, course_id: str, emit=None) -> Session | None:
     sess.recent_messages         = recent
     sess.full_history            = raw_history
     sess.history_summary         = summary
+    sess.topic_summaries         = doc.get("topic_summaries", {})
 
     saved_statuses = doc.get("slide_statuses", {})
     sess.slide_statuses = saved_statuses
@@ -182,8 +176,12 @@ def load_context(session_id: str, course_id: str, emit=None) -> Session | None:
     current_item = sess.find_current_item(doc.get("current_item_id", ""))
     if current_item:
         sess.set_current_item(current_item)
+        sess.current_topic_messages = _extract_current_topic_messages(
+            raw_history, current_item["id"]
+        )
 
-    print(f"[ContextLoader] ready | session='{session_id}' | recent={len(recent)} msgs | summary={'yes' if summary else 'no'}", flush=True)
+    print(f"[ContextLoader] ready | session='{session_id}' | recent={len(recent)} msgs | "
+          f"summary={'yes' if summary else 'no'} | topic_summaries={len(sess.topic_summaries)}", flush=True)
     return sess
 
 
@@ -191,7 +189,6 @@ def new_context(session_id: str, course_id: str,
                 user_name: str = "", user_role: str = "",
                 user_skillsets: list = None,
                 user_description: str = "") -> Session:
-    """Build a brand-new Session for a first-time user."""
     items, course_wrap = _get_course_data(course_id)
 
     sess = Session(session_id=session_id)

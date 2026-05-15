@@ -1,8 +1,6 @@
 from config import WORKER_MODEL, anthropic_client
 from session import Session
 
-client = anthropic_client
-
 
 def get_observer_advice(session: Session) -> str:
     """
@@ -22,7 +20,7 @@ def get_observer_advice(session: Session) -> str:
         f"Be specific to what you just observed — not generic advice."
     )
 
-    response = client.messages.create(
+    response = anthropic_client.messages.create(
         model=WORKER_MODEL,
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}]
@@ -42,7 +40,7 @@ def generate_wrap(session: Session) -> str:
         f"2-3 sentences. End with one sentence about why the material matters for their role. No fluff."
     )
 
-    response = client.messages.create(
+    response = anthropic_client.messages.create(
         model=WORKER_MODEL,
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}]

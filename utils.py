@@ -1,5 +1,18 @@
 import json
 import re
+import threading
+from mongo import save_course_session, save_user_profile
+from session import Session
+
+
+# All internal signals that must never reach the frontend
+_SIGNALS = (
+    "[READY_TO_PROCEED]",
+    "[IMMEDIATE_PROCEED]",
+    "[LEVEL_ASSESSMENT_STARTED]",
+    "[LEVEL_ALREADY_SET]",
+    "[LEVEL_ASSESSMENT_COMPLETE]",
+)
 
 
 def parse_llm_json(text: str) -> dict | None:
@@ -55,3 +68,18 @@ def parse_llm_json(text: str) -> dict | None:
                 pass
 
     return None
+
+
+def strip_signals(text: str) -> str:
+    """Remove all internal agent signals from text before sending to the frontend."""
+    for sig in _SIGNALS:
+        text = text.replace(sig, "")
+    return text.strip()
+
+
+def persist_session(sess: Session, background: bool = False) -> None:
+    """Save session to MongoDB. Pass background=True to fire-and-forget."""
+    if background:
+        threading.Thread(target=save_course_session, args=(sess,), daemon=True).start()
+    else:
+        save_course_session(sess)

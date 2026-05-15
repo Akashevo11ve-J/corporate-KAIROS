@@ -1,33 +1,29 @@
-"""
-FastAPI server — Teaching Assistant POC
-Run: uvicorn server:app --reload --port 8000
-"""
-
-import json
-import uuid
 import asyncio
+import json
 import queue
 import threading
+import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from config import VIDEO_URL, IMAGE_URL, SIGNAL_READY_TO_PROCEED
-from mongo import load_course_session, build_course_items
-from mongo import save_user_profile
-from agents.observer_agent import generate_wrap
 from agents.level_agent import level_answer
 from agents.main_agent import chat as agent_chat
-from agents.status_agent import StatusAgent, _TOOL_POOL_MAP
+from agents.observer_agent import generate_wrap
+from agents.status_agent import StatusAgent
+from config import IMAGE_URL, SIGNAL_IMMEDIATE_PROCEED, SIGNAL_READY_TO_PROCEED, VIDEO_URL
 from context_loader import load_context, new_context
-from store import persist_session
+from mongo import build_course_items, load_course_session, save_user_profile
+from utils import persist_session
+from tools.tool_schemas import TOOL_STATUS_MAP as _TOOL_POOL_MAP
+from topic_compressor import compress_topic_bg
+from utils import strip_signals
 
-BASE_DIR   = Path(__file__).parent
-SLIDES_DIR = BASE_DIR / "Cash-Flow-Training for akash"
+BASE_DIR = Path(__file__).parent
 
 app = FastAPI(title="Teaching Assistant POC")
 app.add_middleware(
@@ -39,10 +35,12 @@ app.add_middleware(
 app.mount("/src", StaticFiles(directory=BASE_DIR / "src"), name="src")
 
 
+_HIDDEN_MESSAGES = {"[slide loaded]", "[video loaded]"}
+
 def _display_messages_from_history(full_history: list) -> list:
     return [
         m for m in full_history
-        if isinstance(m.get("content"), str) and m["content"] != "[slide loaded]"
+        if isinstance(m.get("content"), str) and m["content"] not in _HIDDEN_MESSAGES
     ]
 
 
@@ -166,10 +164,24 @@ async def advance(req: NavigateRequest):
     if not sess:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    # Capture what we're leaving before advancing
+    completed_item = sess.get_current_item()
+    topic_msgs_snapshot = list(sess.current_topic_messages)
+
     sess.advance_to_next()
     item = sess.get_current_item()
     if item:
         sess.set_current_item(item)
+
+    # Fire background compression for the topic we just left
+    if completed_item and topic_msgs_snapshot:
+        compress_topic_bg(
+            session_id=req.session_id,
+            item_id=completed_item["id"],
+            item_title=completed_item.get("title", completed_item["id"]),
+            current_topic_messages=topic_msgs_snapshot,
+            existing_summaries=dict(sess.topic_summaries),
+        )
 
     persist_session(sess, background=True)
     return {"ok": True, "current_item": item}
@@ -243,19 +255,19 @@ async def _drain_event_queue(event_q: queue.Queue, on_done=None):
 
         elif event_name == "done":
             if "response" in data:
-                reply = data["response"]
-                ready = data["ready_to_proceed"]
+                reply     = data["response"]
+                ready     = data["ready_to_proceed"]
+                immediate = data.get("immediate_proceed", False)
             else:
-                reply = data.get("text", "")
-                ready = data.get("ready_to_proceed", SIGNAL_READY_TO_PROCEED in reply)
-                reply = reply.replace(SIGNAL_READY_TO_PROCEED, "").strip()
+                reply     = data.get("text", "")
+                immediate = SIGNAL_IMMEDIATE_PROCEED in reply
+                ready     = (not immediate) and (SIGNAL_READY_TO_PROCEED in reply)
 
-            # Strip internal level-assessment signal if it leaked into display text
-            reply = reply.replace("[LEVEL_ASSESSMENT_STARTED]", "").replace("[LEVEL_ALREADY_SET]", "").strip()
+            reply = strip_signals(reply)
 
             if on_done:
                 on_done(data)
-            yield _sse("result", {"ready_to_proceed": ready})
+            yield _sse("result", {"ready_to_proceed": ready, "immediate_proceed": immediate})
             return
 
         elif event_name == "error":

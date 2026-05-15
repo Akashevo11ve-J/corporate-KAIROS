@@ -942,10 +942,11 @@ async function loadSlide(idx, isInit) {
 
   visitedSlides.add(idx);
   setBusy(true);
+  const loadedMsg = item.type === "video" ? "[video loaded]" : "[slide loaded]";
   const resp = await fetch(`${API}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: sessionId, course_id: courseId, message: "[slide loaded]" }),
+    body: JSON.stringify({ session_id: sessionId, course_id: courseId, message: loadedMsg }),
   });
   await consumeStream(resp);
 }
@@ -1012,7 +1013,12 @@ async function consumeStream(resp, onDone) {
         setBusy(false);
         if (liveBubble) finaliseBubble(liveBubble);
         liveBubble = null;
-        if (d.ready_to_proceed) showContinue();
+
+        if (d.immediate_proceed) {
+          advanceSlide();
+        } else if (d.ready_to_proceed) {
+          showContinue();
+        }
 
         if (onDone) onDone();
         return;
@@ -1035,7 +1041,7 @@ async function consumeStream(resp, onDone) {
 }
 
 // ── Continue / advance ────────────────────────────────────────────────────────
-continueBtn.addEventListener("click", async () => {
+async function advanceSlide() {
   if (busy) return;
   busy = true;
   setBusy(true);
@@ -1060,7 +1066,9 @@ continueBtn.addEventListener("click", async () => {
 
   setBusy(false);
   busy = false;
-});
+}
+
+continueBtn.addEventListener("click", () => advanceSlide());
 
 
 // ── UI helpers ────────────────────────────────────────────────────────────────
