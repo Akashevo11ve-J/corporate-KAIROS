@@ -45,6 +45,7 @@ def _build_system_prompt(session: Session) -> list:
         current_content_title=current_item.get("title", ""),
         content_type=current_item.get("type", "slide"),
         course_progress_json=session.get_course_progress_json(),
+        course_wrap=session.course_wrap,
         current_content_context=session.current_content_context,
     )
 
